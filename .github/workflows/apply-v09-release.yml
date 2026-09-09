@@ -27,6 +27,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          cat > /tmp/chunks.sha256 <<'EOF'
+          c514e50753d2b79f69d0e635eb9c764f457a439c7b5b85879ad0300534cd1c1b  scripts/v09-patch.part00
+          379842f81b6c73ae3980e3a93be7ef6b19d097ccb745e09c2e8bb6c7693e09ca  scripts/v09-patch.part01
+          13116d66f3190a799ffcdd05068b0a15e883382dbedc53a4f99d83812e50d8f9  scripts/v09-patch.part02
+          113f6fe30c6ddeaf9c76465a05aae8136b2c673e426e318cae1a6c80c8754814  scripts/v09-patch.part03
+          34a53b75f69a2cf2617120028ef2399c5db15c3ea4205631ba21808d972e201a  scripts/v09-readme.part00
+          f2cafc8da2903cdac6307b85886e40e895e7f19a8edbd8d03694f313ba19a7ee  scripts/v09-readme.part01
+          19a0c25257b9342a2fcac84c20046f562714a762dd43046adf8d29c4f42e124b  scripts/v09-readme.part02
+          EOF
+          sha256sum -c /tmp/chunks.sha256
           cat scripts/v09-patch.part00 scripts/v09-patch.part01 scripts/v09-patch.part02 scripts/v09-patch.part03 | base64 -d > /tmp/v09.patch.xz
           echo '85be125f3fb933e0a4d31e2ac91941d3b030cdf9a3c3110c14fd8d740e7c558b  /tmp/v09.patch.xz' | sha256sum -c -
           xz -dc /tmp/v09.patch.xz > /tmp/v09.patch
