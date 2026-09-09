@@ -37,9 +37,9 @@ jobs:
           19a0c25257b9342a2fcac84c20046f562714a762dd43046adf8d29c4f42e124b  scripts/v09-readme.part02
           EOF
           sha256sum -c /tmp/chunks.sha256
-          cat scripts/v09-patch.part00 scripts/v09-patch.part01 scripts/v09-patch.part02 scripts/v09-patch.part03 | base64 -d > /tmp/v09.patch.xz
-          echo '85be125f3fb933e0a4d31e2ac91941d3b030cdf9a3c3110c14fd8d740e7c558b  /tmp/v09.patch.xz' | sha256sum -c -
-          xz -dc /tmp/v09.patch.xz > /tmp/v09.patch
+          cat scripts/v09-patch.part00 scripts/v09-patch.part01 scripts/v09-patch.part02 scripts/v09-patch.part03 | base64 -d > /tmp/v09.patch.gz
+          echo 'c99b81504af53bb417d36b764f72bc403360e1bb8f184a215d314cc696809355  /tmp/v09.patch.gz' | sha256sum -c -
+          gzip -dc /tmp/v09.patch.gz > /tmp/v09.patch
           git apply --check /tmp/v09.patch
           git apply /tmp/v09.patch
           cat scripts/v09-readme.part00 scripts/v09-readme.part01 scripts/v09-readme.part02 | base64 -d > /tmp/README.md.gz
