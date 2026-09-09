@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="340" height="72" viewBox="0 0 340 72" fill="none">
+  <defs>
+    <linearGradient id="paint" x1="12" y1="8" x2="302" y2="63" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8B5CF6"/><stop offset=".34" stop-color="#06B6D4"/><stop offset=".68" stop-color="#EC4899"/><stop offset="1" stop-color="#A3E635"/>
+    </linearGradient>
+    <filter id="softGlow" x="-20%" y="-40%" width="140%" height="180%"><feGaussianBlur stdDeviation="2.4" result="b"/><feColorMatrix in="b" values="1 0 0 0 0.3 0 1 0 0 0.1 0 0 1 0 0.8 0 0 0 .22 0"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <g opacity=".88">
+    <circle cx="18" cy="15" r="2.2" fill="#8B5CF6"/><circle cx="27" cy="8" r="1.2" fill="#06B6D4"/><circle cx="313" cy="19" r="2" fill="#EC4899"/><circle cx="326" cy="27" r="1.3" fill="#A3E635"/><path d="M8 58c16-8 29-7 43-3" stroke="#06B6D4" stroke-width="2" stroke-linecap="round" opacity=".55"/>
+  </g>
+  <g transform="skewX(-8)" filter="url(#softGlow)">
+    <text x="20" y="48" font-family="Impact, Haettenschweiler, 'Arial Black', sans-serif" font-size="45" letter-spacing="-1.5" fill="url(#paint)" stroke="#0F1115" stroke-width="2.6" paint-order="stroke fill">JOBRADAR</text>
+  </g>
+  <path d="M58 60c62-10 129-8 205-3" stroke="url(#paint)" stroke-width="2.8" stroke-linecap="round" opacity=".85"/>
+  <text x="250" y="67" font-family="Arial, sans-serif" font-size="10" font-weight="700" letter-spacing="2.6" fill="#5D6470">EVERYWHERE</text>
+</svg>

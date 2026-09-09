@@ -1,7 +1,7 @@
 from urllib.parse import urlparse
 import httpx
 
-UA = {"User-Agent":"JobRadarSouth/0.1 (+personal job research; respectful fetch)"}
+UA = {"User-Agent":"JobRadarEverywhere/0.9 (+personal job research; respectful fetch)"}
 
 def domain_matches(url, allowed):
     host = (urlparse(url).hostname or "").lower()

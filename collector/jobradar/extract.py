@@ -7,7 +7,8 @@ from dateutil import parser as dateparser
 from urllib.parse import urljoin
 
 MONEY = re.compile(r"(?:₹|rs\.?|inr)\s*([0-9][0-9,]*(?:\.\d+)?)\s*(k|lpa|lakh)?", re.I)
-EXP_RANGE = re.compile(r"(?:(\d+(?:\.\d+)?)\s*(?:-|to|–|—)\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\+?)\s*(?:years?|yrs?)", re.I)
+EXP_RANGE = re.compile(r"(?:(\d+(?:\.\d+)?)\s*(?:-|to|–|—)\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)(\+)?)\s*(?:years?|yrs?)", re.I)
+EXPLICIT_MIN_EXP = re.compile(r"\b(?:at\s+least|minimum(?:\s+of)?|min\.?)\s*(\d+(?:\.\d+)?)\s*(?:years?|yrs?)", re.I)
 FRESHER = re.compile(r"\b(fresher(?:s)?|fresh graduate|entry[- ]level|no experience|required experience\s*[:\-]?\s*nil|0\s*(?:-|to|–|—)\s*[12]\s*(?:years?|yrs?)|0\+?\s*(?:years?|yrs?))\b", re.I)
 DATE_TOKEN = re.compile(
     r"(?:\b\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\b|"
@@ -55,12 +56,16 @@ def infer_money(text):
 
 def infer_experience(text):
     text = text or ''
+    minimum = EXPLICIT_MIN_EXP.search(text)
+    if minimum:
+        return float(minimum.group(1)), None
     m = EXP_RANGE.search(text)
     if m:
         if m.group(1):
             return float(m.group(1)), float(m.group(2))
         v = float(m.group(3))
-        return v, v
+        # N+ years is an open-ended minimum, not an exact N-year requirement.
+        return (v, None) if m.group(4) else (v, v)
     if FRESHER.search(text):
         return 0.0, 0.0
     return None, None

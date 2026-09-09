@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="420" viewBox="0 0 1400 420" fill="none">
+<defs>
+ <linearGradient id="bg" x1="0" y1="0" x2="1400" y2="420"><stop stop-color="#0A0C12"/><stop offset=".48" stop-color="#141225"/><stop offset="1" stop-color="#08171C"/></linearGradient>
+ <linearGradient id="neon" x1="180" y1="70" x2="1130" y2="345"><stop stop-color="#8B5CF6"/><stop offset=".35" stop-color="#06B6D4"/><stop offset=".68" stop-color="#EC4899"/><stop offset="1" stop-color="#A3E635"/></linearGradient>
+ <radialGradient id="halo"><stop stop-color="#7C3AED" stop-opacity=".36"/><stop offset="1" stop-color="#7C3AED" stop-opacity="0"/></radialGradient>
+ <pattern id="grid" width="44" height="44" patternUnits="userSpaceOnUse"><path d="M44 0H0V44" stroke="#FFFFFF" stroke-opacity=".045"/></pattern>
+ <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="10"/></filter>
+</defs>
+<rect width="1400" height="420" rx="32" fill="url(#bg)"/><rect width="1400" height="420" rx="32" fill="url(#grid)"/>
+<ellipse cx="335" cy="190" rx="340" ry="280" fill="url(#halo)"/>
+<path d="M1045 60c142 40 211 131 244 276" stroke="#06B6D4" stroke-opacity=".18" stroke-width="2"/><path d="M997 83c133 48 196 127 229 251" stroke="#EC4899" stroke-opacity=".18" stroke-width="2"/>
+<g transform="translate(95 58)">
+ <circle cx="48" cy="46" r="32" stroke="url(#neon)" stroke-width="4"/><circle cx="48" cy="46" r="12" stroke="#F8FAFC" stroke-opacity=".8" stroke-width="3"/><path d="M48 46 76 18" stroke="#F8FAFC" stroke-width="4" stroke-linecap="round"/><circle cx="76" cy="18" r="6" fill="#A3E635"/>
+ <circle cx="92" cy="22" r="4" fill="#EC4899"/><circle cx="18" cy="91" r="3" fill="#06B6D4"/><circle cx="96" cy="90" r="2.5" fill="#8B5CF6"/>
+</g>
+<text x="215" y="155" font-family="Impact, 'Arial Black', sans-serif" font-size="84" font-style="italic" letter-spacing="-2" fill="url(#neon)" stroke="#05060A" stroke-width="5" paint-order="stroke fill">JOBRADAR</text>
+<text x="220" y="196" font-family="Arial, sans-serif" font-size="19" font-weight="700" letter-spacing="8" fill="#D9DCE6">EVERYWHERE</text>
+<text x="96" y="275" font-family="Arial, sans-serif" font-size="31" font-weight="700" fill="#F7F8FC">Resume-aware job discovery. Strict where you ask it to be.</text>
+<text x="96" y="315" font-family="Arial, sans-serif" font-size="18" fill="#AAB1C0">Company careers · ATS boards · startups · public-sector sources · alerts · application tracking</text>
+<g transform="translate(96 350)"><rect width="170" height="38" rx="19" fill="#FFFFFF" fill-opacity=".06" stroke="#8B5CF6" stroke-opacity=".5"/><text x="20" y="25" font-family="Arial" font-size="13" font-weight="700" fill="#EDE9FE">FRESHER-AWARE</text><rect x="185" width="170" height="38" rx="19" fill="#FFFFFF" fill-opacity=".06" stroke="#06B6D4" stroke-opacity=".5"/><text x="205" y="25" font-family="Arial" font-size="13" font-weight="700" fill="#CFFAFE">VERIFIED LINKS</text><rect x="370" width="180" height="38" rx="19" fill="#FFFFFF" fill-opacity=".06" stroke="#EC4899" stroke-opacity=".5"/><text x="390" y="25" font-family="Arial" font-size="13" font-weight="700" fill="#FCE7F3">SELF-HOSTED</text></g>
+</svg>

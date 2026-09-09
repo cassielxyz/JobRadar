@@ -10,7 +10,7 @@ from ..models import Job, Category
 from ..scoring import semantic_gate
 
 URL_RE = re.compile(r'https?://[^\s\]\)\}"\']+')
-SOCIAL = ('linkedin.com','reddit.com','x.com','twitter.com','instagram.com','facebook.com')
+SOCIAL = ('linkedin.com','reddit.com','x.com','twitter.com','instagram.com','facebook.com','indeed.com','naukri.com','wellfound.com','cutshort.io','instahyre.com','foundit.in')
 
 
 def _host(url: str) -> str:
@@ -42,15 +42,40 @@ class AgentReachCollector:
         return self.enabled() and bool(shutil.which('mcporter'))
 
     def _queries(self, category: Category):
-        loc = ' '.join(category.locations[:8]) or 'Chennai Tamil Nadu Bengaluru Bangalore Kerala'
-        terms = []
-        for x in category.role_keywords[:3]:
-            terms.append(f'"{x}" fresher entry level {loc} careers apply')
-        if category.type == 'internship':
-            terms = [f'"{x}" internship stipend {loc} careers apply' for x in category.role_keywords[:3]]
-        elif category.type == 'startup':
-            terms = [f'"{x}" startup fresher {loc} careers jobs' for x in category.role_keywords[:3]]
-        return terms
+        loc = ' '.join(category.locations[:8]) or 'India remote'
+        roles = [str(x).strip() for x in category.role_keywords[:4] if str(x).strip()]
+        if not roles:
+            return []
+        queries = []
+        for role in roles[:3]:
+            base = f'"{role}" {loc}'
+            if getattr(category, 'fresher_only', False):
+                base += ' fresher OR "entry level" OR junior OR graduate'
+            if category.type == 'internship':
+                base = f'"{role}" internship stipend {loc}'
+            elif category.type == 'startup':
+                base += ' startup'
+            queries.extend([
+                f'{base} careers apply',
+                f'{base} site:linkedin.com/jobs/view',
+                f'{base} site:in.indeed.com/viewjob',
+                f'{base} site:naukri.com/job-listings',
+                f'{base} (site:wellfound.com/jobs OR site:cutshort.io OR site:instahyre.com)',
+                f'{base} (site:jobs.lever.co OR site:boards.greenhouse.io OR site:jobs.ashbyhq.com OR site:careers.smartrecruiters.com)',
+            ])
+        # Startup/company discovery catches roles that never make it to the large boards.
+        if category.type in {'startup','entry_level','custom'}:
+            queries.append(f'India startup careers {loc} networking cybersecurity cloud infrastructure jobs')
+            queries.append(f'"careers" "security" startup {loc} "apply"')
+        out=[]
+        seen=set()
+        for q in queries:
+            key=q.casefold()
+            if key not in seen:
+                seen.add(key);out.append(q)
+            if len(out)>=18:
+                break
+        return out
 
     def _call_exa(self, query: str):
         if not self.available():
@@ -89,7 +114,7 @@ class AgentReachCollector:
                 # verified final Apply button unless another resolver later finds an official page.
                 company = 'Web discovery'
                 if any(_host(url).endswith(d) for d in SOCIAL):
-                    company = 'Community / social discovery'
+                    company = 'External job-platform discovery'
                 job=Job(
                     title=(title or snippet or url)[:240], company=company, location='',
                     description=(snippet or title)[:6000], source_id=source_id,

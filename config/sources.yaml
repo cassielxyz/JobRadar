@@ -1,4 +1,5 @@
 sources:
+  # Government / PSU / public-sector authoritative sources.
   - id: tnpsc
     name: TNPSC
     kind: government
@@ -90,6 +91,10 @@ sources:
     url: https://www.ecil.co.in/jobs.html
     official_domains: [ecil.co.in]
     priority: 95
+
+  # Broad private/startup discovery. FreeHire exposes a public keyless read API and aggregates
+  # ATS boards, job boards and company career sites. Every result is independently filtered by
+  # JobRadar before display/alert.
   - id: freehire
     name: FreeHire discovery
     kind: job_board
@@ -97,6 +102,11 @@ sources:
     official_domains: [freehire.me]
     priority: 90
     config: {provider: freehire}
+
+  # Optional web/platform discovery. Agent Reach configures Exa/mcporter; JobRadar uses it
+  # to discover LinkedIn, Indeed, Naukri, Wellfound, Cutshort, Instahyre, startup career pages
+  # and direct ATS postings (Greenhouse/Lever/Ashby/SmartRecruiters) when available. These are
+  # discovery targets; JobRadar still verifies relevance and application destinations itself.
   - id: agent-reach
     name: Agent Reach / Exa discovery
     kind: community
@@ -104,6 +114,8 @@ sources:
     official_domains: []
     priority: 70
     config: {provider: agent_reach}
+
+  # Templates are intentionally disabled until a concrete company board token/name is supplied.
   - id: greenhouse
     name: Greenhouse Board Template
     kind: ats

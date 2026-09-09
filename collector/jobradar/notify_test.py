@@ -3,19 +3,21 @@ from datetime import datetime, timezone
 
 from .db import SupabaseREST
 from .notifications import get_settings, deliver
+from .integration_config import apply_dashboard_integrations
 
 
 def main():
     db = SupabaseREST()
     run = db.insert('research_runs', {'trigger': 'notification-test', 'status': 'running'})[0]
     run_id = run['id']
+    integration_state = apply_dashboard_integrations(db)
     settings = get_settings(db)
     text = (
-        'JobRadar South notification test\n'
+        'JobRadar Everywhere notification test\n'
         'If you received this message, this delivery channel is configured correctly.\n'
         'This is a test only; no job application is required.'
     )
-    results = deliver('JobRadar South — notification test', text, None, settings)
+    results = deliver('JobRadar Everywhere — notification test', text, None, settings)
     safe = [{k: v for k, v in r.items() if k not in {'token', 'password'}} for r in results]
     failed = [r for r in safe if not r.get('ok')]
     status = 'completed' if results and not failed else 'failed'
@@ -38,7 +40,7 @@ def main():
             },
         },
     }, {'id': f'eq.{run_id}'})
-    print(json.dumps({'notification_test': safe, 'settings': settings}, indent=2))
+    print(json.dumps({'notification_test': safe, 'settings': settings, 'dashboard_integrations': integration_state}, indent=2))
     if not results:
         raise SystemExit('All notification channels are disabled in dashboard settings.')
     if failed:

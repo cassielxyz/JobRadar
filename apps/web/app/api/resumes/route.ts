@@ -3,6 +3,7 @@ import {admin} from '@/lib/supabase';
 import {getAuthorizedUser} from '@/lib/auth';
 import {extractResumeText,parseResumeDeterministic,enrichResumeWithGemini} from '@/lib/resume-parser';
 import {dispatchWorkflow} from '@/lib/github-actions';
+import {decryptIntegrations} from '@/lib/integration-crypto';
 
 export const runtime='nodejs';
 const MAX=10*1024*1024;
@@ -25,7 +26,10 @@ export async function POST(req:Request){
  const ext=file.name.toLowerCase(); if(!okTypes.has(file.type)&&!(/\.(pdf|docx|txt)$/.test(ext)))return NextResponse.json({error:'Upload PDF, DOCX or TXT.'},{status:400});
  let text=''; try{text=await extractResumeText(file)}catch(e:any){return NextResponse.json({error:e?.message||'Could not read resume.'},{status:400})}
  if(text.length<80)return NextResponse.json({error:'Very little selectable text was found. Use a text-based PDF/DOCX rather than a scanned image resume.'},{status:400});
- let parsed=parseResumeDeterministic(text); parsed=await enrichResumeWithGemini(text,parsed);
+ let parsed=parseResumeDeterministic(text);
+ let aiOverride:undefined|{key?:string;model?:string};
+ try{const row=await admin().from('integration_settings').select('encrypted_payload').eq('user_id',a.user!.id).maybeSingle();if(row.data?.encrypted_payload){const cfg=decryptIntegrations(row.data.encrypted_payload);aiOverride={key:cfg.gemini_api_key,model:cfg.gemini_model};}}catch{}
+ parsed=await enrichResumeWithGemini(text,parsed,aiOverride);
  if(!parsed.full_name){const fallback=(label||file.name.replace(/\.[^.]+$/,'')).replace(/\b(resume|cv|curriculum vitae)\b/ig,' ').replace(/[_-]+/g,' ').replace(/\s+/g,' ').trim();if(/^[A-Za-z][A-Za-z .'-]{2,70}$/.test(fallback))parsed.full_name=fallback;}
  const id=crypto.randomUUID(); const path=`${a.user!.id}/${id}-${safe(file.name)}`; const bytes=Buffer.from(await file.arrayBuffer());
  const up=await admin().storage.from('resumes').upload(path,bytes,{contentType:file.type||'application/octet-stream',upsert:false});

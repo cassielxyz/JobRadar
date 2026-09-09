@@ -47,7 +47,7 @@ class FreeHireCollector:
     direct-link resolver before they can appear or alert.
     """
     def __init__(self):
-        self.client = httpx.Client(timeout=30, follow_redirects=True, headers={"User-Agent":"JobRadarSouth/0.7"})
+        self.client = httpx.Client(timeout=30, follow_redirects=True, headers={"User-Agent":"JobRadarEverywhere/0.9"})
 
     def _queries(self, category: Category):
         seeds = []
@@ -77,7 +77,7 @@ class FreeHireCollector:
         elif category.type == 'internship':
             params['seniority'] = 'intern'
             params['employment_type'] = 'internship'
-        elif category.type == 'entry_level':
+        elif getattr(category, 'fresher_only', False):
             params['seniority'] = 'junior,intern'
         return params
 

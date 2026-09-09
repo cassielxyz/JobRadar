@@ -1,11 +1,11 @@
 import './globals.css';
-import './v08.css';
+import './v09.css';
 import type {Metadata,Viewport} from 'next';
 
 export const metadata:Metadata={
-  title:{default:'JobRadar South',template:'%s · JobRadar South'},
-  description:'Resume-driven fresher job research dashboard for networking, cybersecurity and cloud infrastructure.',
-  applicationName:'JobRadar South',
+  title:{default:'JobRadar Everywhere',template:'%s · JobRadar Everywhere'},
+  description:'Resume-driven verified job discovery, fresher filtering, application tracking and alerts across company careers, ATS boards, startups and public-sector sources.',
+  applicationName:'JobRadar Everywhere',
   manifest:'/manifest.webmanifest',
   icons:{icon:[{url:'/icon.svg',type:'image/svg+xml'}]},
 };

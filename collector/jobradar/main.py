@@ -21,10 +21,11 @@ from .extract import (
     infer_money, infer_experience, infer_deadline, infer_event_type,
     infer_application_status, infer_location, is_stale_title,
 )
-from .scoring import score_job, source_allowed
+from .scoring import score_job, source_allowed, semantic_gate, location_matches
 from .ai import review_job, merge_ai_score
 from .notifications import get_settings, deliver, any_success
 from .resume_match import load_candidate, apply_candidate_to_categories, personalized_score, should_queue_auto_apply
+from .integration_config import apply_dashboard_integrations
 
 ROOT = Path(__file__).resolve().parents[2]
 DISPLAY_MIN_SCORE = int(os.getenv('DASHBOARD_MIN_SCORE', '55') or 55)
@@ -67,7 +68,7 @@ def alert_text(job, cat, score, reasons):
         compensation = f"Stipend ₹{job.stipend_monthly:,}/month"
     destination = job.apply_url if job.event_type == 'vacancy' else (job.notification_url or job.canonical_url)
     lines = [
-        f"JobRadar South — {score}% match",
+        f"JobRadar Everywhere — {score}% match",
         job.title,
         job.company,
         f"Location: {job.location or 'Not disclosed'}",
@@ -85,6 +86,7 @@ def alert_text(job, cat, score, reasons):
 
 
 def _enrich(job, source):
+    # Prefer parsed values from structured sources, fill only missing values.
     text = job.description or ''
     if not job.location:
         job.location = infer_location(text, ((source.get('config') or {}).get('default_location') or ''))
@@ -106,15 +108,32 @@ def _process_job(db, job, source, target_categories, run_errors, notification_se
     if not target_categories:
         return
 
+    # Cheap enrichment + hard semantic/location gates happen before network verification.
+    # This prevents broad discovery sources from spending minutes verifying hundreds of irrelevant URLs.
+    job = _enrich(job, source)
+    if job.application_status == 'closed':
+        return
+    gated = []
+    for cat in target_categories:
+        ok, _ = semantic_gate(job, cat)
+        if not ok:
+            continue
+        if job.location and not location_matches(job.location, cat.locations):
+            loc = (job.location or '').lower()
+            allows_remote = any('remote' in str(x).lower() for x in cat.locations)
+            if 'remote' not in loc or not allows_remote:
+                continue
+        gated.append(cat)
+    target_categories = gated
+    if not target_categories:
+        return
+
     v = verify_url(job.canonical_url, source.get('official_domains') or [])
     if not v.get('active'):
         return
     stats['verified'] += 1
     job.canonical_url = v['canonical_url']
     job.official_verified = v['official']
-    job = _enrich(job, source)
-    if job.application_status == 'closed':
-        return
 
     links = resolve_job_links(
         job.canonical_url, job.source_url, source.get('official_domains') or [],
@@ -162,10 +181,11 @@ def _process_job(db, job, source, target_categories, run_errors, notification_se
 
     for cat in target_categories:
         score, reasons, eligible = score_job(job, cat)
+        # Do not spend AI on jobs already blocked by the hard semantic/experience gates.
         ai_review = {'mode':os.getenv('AI_MODE','auto'),'results':[],'consensus':None}
         if eligible or score >= 45:
             ai_review = review_job(job, cat, score)
-            score, reasons, eligible = merge_ai_score(score, reasons, eligible, ai_review)
+            score, reasons, eligible = merge_ai_score(score, reasons, eligible, ai_review, cat)
         rule_score = score
         score, resume_score, resume_reasons, skill_gaps = personalized_score(job, cat, rule_score, candidate)
         if score < DISPLAY_MIN_SCORE:
@@ -226,6 +246,7 @@ def run(trigger='schedule'):
     runrow = db.insert('research_runs', {'trigger':trigger})[0]
     runid = runrow['id']
     candidate = load_candidate(db)
+    integration_state = apply_dashboard_integrations(db, (candidate or {}).get('preferences', {}).get('user_id') if candidate else None)
     cats = apply_candidate_to_categories(categories(db), candidate)
     sources = load_and_seed_sources(db)
     notification_settings = get_settings(db)
@@ -233,6 +254,7 @@ def run(trigger='schedule'):
     stats = {
         'discovered':0, 'verified':0, 'matched':0, 'alerted':0,
         'notification_attempts':0, 'notification_successes':{}, 'auto_apply_queued':0,
+        'dashboard_integrations': integration_state.get('keys', []),
     }
 
     generic = GenericCollector()
@@ -243,6 +265,7 @@ def run(trigger='schedule'):
 
     source_by_id = {s['id']:s for s in sources}
     try:
+        # 1) Authoritative/static sources. Special dynamic providers are handled below.
         for source in sources:
             provider = (source.get('config') or {}).get('provider')
             if provider in {'freehire','agent_reach'}:
@@ -265,6 +288,7 @@ def run(trigger='schedule'):
                 errors.append({'source':source['id'],'error':str(e)[:500]})
                 db.update('sources', {'last_error':str(e)[:1000]}, {'id':f"eq.{source['id']}"})
 
+        # 2) FreeHire: broad, keyless coverage of ATS/company/job-board sources for private jobs.
         fh_source = source_by_id.get('freehire')
         if fh_source:
             for cat in [c for c in cats if source_allowed(c, 'job_board')]:
@@ -276,6 +300,7 @@ def run(trigger='schedule'):
                 except Exception as e:
                     errors.append({'source':'freehire','category':cat.slug,'error':str(e)[:500]})
 
+        # 3) Agent Reach / Exa: optional hidden web discovery, only when its backend is usable.
         ar_source = source_by_id.get('agent-reach')
         if ar_source and agent_reach.enabled():
             for cat in [c for c in cats if source_allowed(c, 'community')]:

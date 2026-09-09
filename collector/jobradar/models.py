@@ -20,6 +20,7 @@ class Category:
     require_official_verification: bool = False
     source_kinds: list[str] = field(default_factory=list)
     alert_threshold: int = 70
+    fresher_only: bool = False
 
 @dataclass
 class Job:

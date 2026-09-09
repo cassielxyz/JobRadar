@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 import httpx
 
 from .db import SupabaseREST
+from .integration_config import apply_dashboard_integrations
 
 FIELDS = [
     'full_name','email','phone','location','linkedin_url','github_url','professional_summary',
@@ -141,6 +142,7 @@ def _merge(base: dict, providers: list[tuple[str, dict]]):
                 if isinstance(value, bool):
                     out[field] = value
             elif isinstance(value, str) and value.strip():
+                # AI is used to fill/correct weak deterministic fields. Contact values still come from resume text.
                 if not str(out.get(field) or '').strip() or field in {'full_name','professional_summary','location'}:
                     out[field] = re.sub(r'\s+', ' ', value).strip()
     out['ai_enriched'] = bool(used)
@@ -152,6 +154,7 @@ def _merge(base: dict, providers: list[tuple[str, dict]]):
 
 def enrich_resume(resume_id: str | None = None):
     db = SupabaseREST()
+    apply_dashboard_integrations(db)
     if resume_id:
         rows = db.select('resumes', {'select': '*', 'id': f'eq.{resume_id}', 'limit': '1'})
     else:
