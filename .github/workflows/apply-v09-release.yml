@@ -1,60 +1,76 @@
-name: Apply v0.9 release
+name: Apply v0.9 full release
 
 on:
   push:
     branches: [main]
     paths:
-      - '.github/workflows/apply-v09-release.yml'
-  workflow_dispatch:
+      - 'scripts/v09-full.part07'
 
 permissions:
   contents: write
   actions: write
 
 concurrency:
-  group: jobradar-v09-release
+  group: jobradar-v09-full-release
   cancel-in-progress: false
 
 jobs:
   apply:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Reconstruct and verify v0.9 patch
+
+      - name: Reconstruct and verify v0.9 bundle
         shell: bash
         run: |
           set -euo pipefail
-          cat > /tmp/chunks.sha256 <<'EOF'
-          c514e50753d2b79f69d0e635eb9c764f457a439c7b5b85879ad0300534cd1c1b  scripts/v09-patch.part00
-          379842f81b6c73ae3980e3a93be7ef6b19d097ccb745e09c2e8bb6c7693e09ca  scripts/v09-patch.part01
-          13116d66f3190a799ffcdd05068b0a15e883382dbedc53a4f99d83812e50d8f9  scripts/v09-patch.part02
-          113f6fe30c6ddeaf9c76465a05aae8136b2c673e426e318cae1a6c80c8754814  scripts/v09-patch.part03
-          34a53b75f69a2cf2617120028ef2399c5db15c3ea4205631ba21808d972e201a  scripts/v09-readme.part00
-          f2cafc8da2903cdac6307b85886e40e895e7f19a8edbd8d03694f313ba19a7ee  scripts/v09-readme.part01
-          19a0c25257b9342a2fcac84c20046f562714a762dd43046adf8d29c4f42e124b  scripts/v09-readme.part02
-          EOF
-          sha256sum -c /tmp/chunks.sha256
-          cat scripts/v09-patch.part00 scripts/v09-patch.part01 scripts/v09-patch.part02 scripts/v09-patch.part03 | base64 -d > /tmp/v09.patch.gz
-          echo 'c99b81504af53bb417d36b764f72bc403360e1bb8f184a215d314cc696809355  /tmp/v09.patch.gz' | sha256sum -c -
-          gzip -dc /tmp/v09.patch.gz > /tmp/v09.patch
-          git apply --check /tmp/v09.patch
-          git apply /tmp/v09.patch
-          cat scripts/v09-readme.part00 scripts/v09-readme.part01 scripts/v09-readme.part02 | base64 -d > /tmp/README.md.gz
-          echo '80992500cc565ed1eb02620c28e2b655cab2a61b8545e6b22bf9e0bf8472d80f  /tmp/README.md.gz' | sha256sum -c -
-          gzip -dc /tmp/README.md.gz > README.md
-      - name: Remove temporary release staging files
+          for i in 00 01 02 03 04 05 06 07; do test -s "scripts/v09-full.part${i}"; done
+          cat scripts/v09-full.part00 scripts/v09-full.part01 scripts/v09-full.part02 scripts/v09-full.part03 scripts/v09-full.part04 scripts/v09-full.part05 scripts/v09-full.part06 scripts/v09-full.part07 | base64 -d > /tmp/v09.tar.xz
+          echo '3805579a21b3e712987d17f2edadcd485575123e5d827b9756135408a99bf128  /tmp/v09.tar.xz' | sha256sum -c -
+          xz -dc /tmp/v09.tar.xz > /tmp/v09.tar
+          echo 'a7132ced250bd6935db7b910646e9e375862fc739d42fea20c8414d6745da864  /tmp/v09.tar' | sha256sum -c -
+          python - <<'PY'
+          import os, tarfile
+          root=os.path.realpath(os.getcwd())
+          with tarfile.open('/tmp/v09.tar','r:') as tf:
+              members=tf.getmembers()
+              for m in members:
+                  target=os.path.realpath(os.path.join(root,m.name))
+                  if target != root and not target.startswith(root+os.sep):
+                      raise SystemExit('unsafe bundle path: '+m.name)
+                  if m.issym() or m.islnk():
+                      raise SystemExit('links are not allowed: '+m.name)
+              tf.extractall(root,members=members)
+              print(f'Applied {len(members)} JobRadar Everywhere v0.9 files')
+          PY
+
+      - name: Test Python collector
         run: |
+          python -m pip install -r collector/requirements.txt
+          python -m pytest collector/tests -q
+          python -m compileall -q collector/jobradar
+
+      - name: Test production dashboard build
+        working-directory: apps/web
+        run: |
+          npm install --package-lock=false --no-audit --no-fund
+          npm run build
+
+      - name: Remove temporary release staging
+        run: |
+          rm -f scripts/v09-full.part*
           rm -f scripts/v09-patch.part*
           rm -f scripts/v09-readme.part*
           rm -f scripts/jobradar-v09-release.part*
           rm -f .github/workflows/apply-v09-release.yml
+
       - name: Commit JobRadar Everywhere v0.9
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git commit -m 'feat: JobRadar Everywhere v0.9 fresher rules, category editing and integrations'
+          git commit -m 'feat: JobRadar Everywhere v0.9 fresher rules, editable categories and integrations'
           git push origin HEAD:main
