@@ -48,11 +48,12 @@ jobs:
           PY
 
       - name: Test Python collector
+        working-directory: collector
         run: |
-          python -m pip install -r collector/requirements.txt
+          python -m pip install -r requirements.txt
           python -m pip install pytest
-          python -m pytest collector/tests -q
-          python -m compileall -q collector/jobradar
+          python -m pytest tests -q
+          python -m compileall -q jobradar
 
       - name: Test production dashboard build
         working-directory: apps/web
