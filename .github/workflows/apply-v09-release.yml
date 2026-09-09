@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'scripts/v09-full.part07'
+      - '.github/workflows/apply-v09-release.yml'
 
 permissions:
   contents: write
