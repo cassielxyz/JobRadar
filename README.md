@@ -1,4 +1,4 @@
-# JobRadar South
+# JobRadar South  [![Job research](https://github.com/cassielxyz/JobRadar/actions/workflows/research.yml/badge.svg)](https://github.com/cassielxyz/JobRadar/actions/workflows/research.yml)
 
 A free-first automated South India job research dashboard for fresher cybersecurity, networking and cloud-networking opportunities.
 
