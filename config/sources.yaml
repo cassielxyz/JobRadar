@@ -1,0 +1,106 @@
+sources:
+  # Government / PSU / public sector — authoritative discovery roots.
+  - id: tnpsc
+    name: TNPSC
+    kind: government
+    url: https://www.tnpsc.gov.in/English/Notification.aspx
+    official_domains: [tnpsc.gov.in]
+    priority: 100
+  - id: tn-careers
+    name: Tamil Nadu Career Services
+    kind: government
+    url: https://tamilnaducareerservices.tn.gov.in/
+    official_domains: [tamilnaducareerservices.tn.gov.in]
+    priority: 95
+  - id: kerala-psc
+    name: Kerala PSC
+    kind: government
+    url: https://www.keralapsc.gov.in/notifications
+    official_domains: [keralapsc.gov.in]
+    priority: 100
+  - id: kerala-cmd
+    name: Kerala CMD
+    kind: government
+    url: https://cmd.kerala.gov.in/recruitment/
+    official_domains: [cmd.kerala.gov.in]
+    priority: 95
+  - id: kerala-itmission
+    name: Kerala State IT Mission
+    kind: government
+    url: https://careers-itmission.kerala.gov.in/
+    official_domains: [careers-itmission.kerala.gov.in, itmission.kerala.gov.in]
+    priority: 100
+  - id: tanfinet
+    name: TANFINET
+    kind: government
+    url: https://tanfinet.tn.gov.in/pages/view/careers
+    official_domains: [tanfinet.tn.gov.in]
+    priority: 100
+  - id: drdo
+    name: DRDO Vacancies
+    kind: government
+    url: https://www.drdo.gov.in/drdo/en/offerings/vacancies
+    official_domains: [drdo.gov.in]
+    priority: 100
+  - id: isro
+    name: ISRO Careers
+    kind: government
+    url: https://www.isro.gov.in/Careers.html
+    official_domains: [isro.gov.in]
+    priority: 100
+  - id: bel
+    name: BEL Job Notifications
+    kind: psu
+    url: https://bel-india.in/job-notifications/
+    official_domains: [bel-india.in]
+    priority: 100
+  - id: cdac
+    name: C-DAC Careers
+    kind: government
+    url: https://careers.cdac.in/
+    official_domains: [cdac.in, careers.cdac.in]
+    priority: 100
+  - id: nielit
+    name: NIELIT Recruitment
+    kind: government
+    url: https://recruit-delhi.nielit.gov.in/
+    official_domains: [nielit.gov.in, recruit-delhi.nielit.gov.in]
+    priority: 100
+  - id: rrb-chennai
+    name: RRB Chennai
+    kind: railway
+    url: https://www.rrbchennai.gov.in/
+    official_domains: [rrbchennai.gov.in]
+    priority: 100
+  - id: bsnl
+    name: BSNL Careers
+    kind: psu
+    url: https://www.bsnl.co.in/opencms/bsnl/BSNL/about_us/hrd/jobs.html
+    official_domains: [bsnl.co.in]
+    priority: 95
+  - id: ecil
+    name: ECIL Careers
+    kind: psu
+    url: https://www.ecil.co.in/jobs.html
+    official_domains: [ecil.co.in]
+    priority: 95
+
+  # ATS/source templates. Add concrete boards in the dashboard/source table.
+  - id: greenhouse
+    name: Greenhouse Boards
+    kind: ats
+    url: https://boards.greenhouse.io/
+    official_domains: [greenhouse.io]
+    priority: 80
+  - id: lever
+    name: Lever Jobs
+    kind: ats
+    url: https://jobs.lever.co/
+    official_domains: [lever.co]
+    priority: 80
+  - id: ashby
+    name: Ashby Jobs
+    kind: ats
+    url: https://jobs.ashbyhq.com/
+    official_domains: [ashbyhq.com]
+    priority: 80

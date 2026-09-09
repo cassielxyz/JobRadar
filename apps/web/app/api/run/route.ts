@@ -1,0 +1,3 @@
+import {NextResponse} from 'next/server';
+import {getAuthorizedUser} from '@/lib/auth';
+export async function POST(){const a=await getAuthorizedUser();if(a.status!==200)return NextResponse.json({error:a.status===403?'Forbidden':'Unauthorized'},{status:a.status});const repo=process.env.GITHUB_REPOSITORY,token=process.env.GITHUB_DISPATCH_TOKEN;if(!repo||!token)return NextResponse.json({error:'Configure GITHUB_REPOSITORY and GITHUB_DISPATCH_TOKEN for manual cloud runs.'},{status:400});const r=await fetch(`https://api.github.com/repos/${repo}/actions/workflows/research.yml/dispatches`,{method:'POST',headers:{Authorization:`Bearer ${token}`,Accept:'application/vnd.github+json'},body:JSON.stringify({ref:'main'})});return NextResponse.json({ok:r.ok},{status:r.ok?200:500});}

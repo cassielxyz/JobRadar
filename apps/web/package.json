@@ -1,0 +1,21 @@
+{
+  "name": "jobradar-web",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.45.4",
+    "next": "14.2.15",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "@supabase/ssr": "^0.5.2"
+  },
+  "devDependencies": {
+    "@types/node": "22.7.5",
+    "@types/react": "18.3.11",
+    "typescript": "5.6.3"
+  }
+}

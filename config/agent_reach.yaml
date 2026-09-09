@@ -1,0 +1,10 @@
+# Optional command-based discovery. Commands should output text or JSON to stdout.
+# Keep authenticated social-platform commands disabled in GitHub-hosted CI unless
+# you have explicitly configured their supported credentials.
+commands:
+  - id: github-career-signals
+    enabled: true
+    command: ["gh", "search", "issues", "{query}", "--limit", "20", "--json", "title,url,repository"]
+  - id: reddit-via-web
+    enabled: false
+    command: ["rdt", "search", "{query}"]

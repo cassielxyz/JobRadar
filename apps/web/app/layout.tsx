@@ -1,0 +1,1 @@
+import './globals.css'; export const metadata={title:'JobRadar South',description:'Verified fresher job research dashboard'}; export default function RootLayout({children}:{children:React.ReactNode}){return <html lang="en"><body>{children}</body></html>}
