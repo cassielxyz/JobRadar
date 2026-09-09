@@ -2,6 +2,7 @@ import {NextResponse} from 'next/server';
 import {admin} from '@/lib/supabase';
 import {getAuthorizedUser} from '@/lib/auth';
 import {extractResumeText,parseResumeDeterministic,enrichResumeWithGemini} from '@/lib/resume-parser';
+import {dispatchWorkflow} from '@/lib/github-actions';
 
 export const runtime='nodejs';
 const MAX=10*1024*1024;
@@ -25,6 +26,7 @@ export async function POST(req:Request){
  let text=''; try{text=await extractResumeText(file)}catch(e:any){return NextResponse.json({error:e?.message||'Could not read resume.'},{status:400})}
  if(text.length<80)return NextResponse.json({error:'Very little selectable text was found. Use a text-based PDF/DOCX rather than a scanned image resume.'},{status:400});
  let parsed=parseResumeDeterministic(text); parsed=await enrichResumeWithGemini(text,parsed);
+ if(!parsed.full_name){const fallback=(label||file.name.replace(/\.[^.]+$/,'')).replace(/\b(resume|cv|curriculum vitae)\b/ig,' ').replace(/[_-]+/g,' ').replace(/\s+/g,' ').trim();if(/^[A-Za-z][A-Za-z .'-]{2,70}$/.test(fallback))parsed.full_name=fallback;}
  const id=crypto.randomUUID(); const path=`${a.user!.id}/${id}-${safe(file.name)}`; const bytes=Buffer.from(await file.arrayBuffer());
  const up=await admin().storage.from('resumes').upload(path,bytes,{contentType:file.type||'application/octet-stream',upsert:false});
  if(up.error)return NextResponse.json({error:up.error.message},{status:500});
@@ -33,7 +35,8 @@ export async function POST(req:Request){
  const {data,error}=await admin().from('resumes').insert(row).select().single();
  if(error){await admin().storage.from('resumes').remove([path]);return NextResponse.json({error:error.message},{status:500})}
  if(makeActive)await admin().from('candidate_preferences').upsert({user_id:a.user!.id,active_resume_id:id,updated_at:new Date().toISOString()},{onConflict:'user_id'});
- return NextResponse.json(data,{status:201});
+ const aiDispatch=await dispatchWorkflow('resume-enrich.yml',{resume_id:id}).catch((e:any)=>({ok:false,status:500,error:String(e?.message||e)}));
+ return NextResponse.json({...data,ai_enrichment_queued:!!aiDispatch.ok,ai_enrichment_error:aiDispatch.ok?undefined:aiDispatch.error},{status:201});
 }
 
 export async function PATCH(req:Request){

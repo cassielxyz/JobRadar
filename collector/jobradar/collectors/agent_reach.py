@@ -7,6 +7,7 @@ import shutil
 import subprocess
 from urllib.parse import urlparse
 from ..models import Job, Category
+from ..scoring import semantic_gate
 
 URL_RE = re.compile(r'https?://[^\s\]\)\}"\']+')
 SOCIAL = ('linkedin.com','reddit.com','x.com','twitter.com','instagram.com','facebook.com')
@@ -43,20 +44,20 @@ class AgentReachCollector:
     def _queries(self, category: Category):
         loc = ' '.join(category.locations[:8]) or 'Chennai Tamil Nadu Bengaluru Bangalore Kerala'
         terms = []
-        for x in category.role_keywords[:5]:
+        for x in category.role_keywords[:3]:
             terms.append(f'"{x}" fresher entry level {loc} careers apply')
         if category.type == 'internship':
-            terms = [f'"{x}" internship stipend {loc} careers apply' for x in category.role_keywords[:5]]
+            terms = [f'"{x}" internship stipend {loc} careers apply' for x in category.role_keywords[:3]]
         elif category.type == 'startup':
-            terms = [f'"{x}" startup fresher {loc} careers jobs' for x in category.role_keywords[:5]]
+            terms = [f'"{x}" startup fresher {loc} careers jobs' for x in category.role_keywords[:3]]
         return terms
 
     def _call_exa(self, query: str):
         if not self.available():
             return []
-        cmd = ['mcporter','call','exa.web_search_exa',f'query={query}','numResults=8']
+        cmd = ['mcporter','call','exa.web_search_exa',f'query={query}','numResults=4']
         try:
-            p = subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False)
+            p = subprocess.run(cmd, capture_output=True, text=True, timeout=35, check=False)
         except Exception:
             return []
         if p.returncode != 0 or not p.stdout.strip():
@@ -84,15 +85,21 @@ class AgentReachCollector:
                 if not url or url in seen:
                     continue
                 seen.add(url)
+                # Social links are valid discovery evidence but intentionally cannot become a
+                # verified final Apply button unless another resolver later finds an official page.
                 company = 'Web discovery'
                 if any(_host(url).endswith(d) for d in SOCIAL):
                     company = 'Community / social discovery'
-                out.append(Job(
+                job=Job(
                     title=(title or snippet or url)[:240], company=company, location='',
                     description=(snippet or title)[:6000], source_id=source_id,
                     source_url=url, canonical_url=url,
                     raw={'discovered_via':'agent-reach-exa','query':query,'result':raw,'source_kind':'community'}
-                ))
-                if len(out) >= 80:
+                )
+                relevant, _ = semantic_gate(job, category)
+                if not relevant:
+                    continue
+                out.append(job)
+                if len(out) >= 18:
                     return out
         return out

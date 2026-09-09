@@ -37,15 +37,18 @@ def load_candidate(db):
 
 def apply_candidate_to_categories(categories, candidate):
     if not candidate:return categories
-    p=candidate.get('preferences') or {}; r=candidate.get('resume') or {}
+    p=candidate.get('preferences') or {}; r=candidate.get('resume') or {}; parsed=r.get('parsed_json') or {}
     locs=[x for x in (p.get('locations') or []) if str(x).strip()]
     roles=[x for x in (p.get('target_roles') or []) if str(x).strip()]
-    resume_roles=[x for x in (r.get('target_roles') or []) if str(x).strip()]
+    resume_roles=[x for x in [*(r.get('target_roles') or []),*(parsed.get('target_roles') or [])] if str(x).strip()]
     excluded=[x for x in (p.get('excluded_terms') or []) if str(x).strip()]
-    discovery_skill_allow={'ccna','cisco','network security','cybersecurity','information security','soc','noc','cloud networking','cloud security','aws','azure','linux','firewall','siem','vapt'}
-    resume_skills=[x for x in (r.get('skills') or []) if norm(x) in discovery_skill_allow]
+    discovery_skill_allow={'ccna','ccnp','cisco','routing','switching','tcp/ip','vlan','network security','cybersecurity','information security','soc','noc','cloud networking','cloud security','aws','azure','vpc','vnet','linux','firewall','siem','vapt','wireshark','active directory'}
+    evidence=' '.join([str(r.get('raw_text') or ''),str(parsed.get('professional_summary') or ''),' '.join(parsed.get('projects') or []),' '.join(r.get('certifications') or [])])
+    inferred=[x for x in JOB_SKILLS if _contains(evidence,x)]
+    resume_skills=[x for x in [*(r.get('skills') or []),*inferred] if norm(x) in discovery_skill_allow]
     for c in categories:
         if locs:c.locations=list(dict.fromkeys(locs))
+        # Global role preferences personalize discovery but preserve each category's specialist seeds.
         c.role_keywords=list(dict.fromkeys([*roles,*resume_roles,*c.role_keywords]))[:40]
         c.hidden_keywords=list(dict.fromkeys([*c.hidden_keywords,*resume_skills]))[:40]
         c.exclude_keywords=list(dict.fromkeys([*excluded,*c.exclude_keywords]))[:30]
@@ -62,27 +65,30 @@ def apply_candidate_to_categories(categories, candidate):
 def personalized_score(job, category, base_score, candidate):
     if not candidate or not candidate.get('resume'):
         return base_score, None, [], []
-    p=candidate.get('preferences') or {}; r=candidate.get('resume') or {}; text=f"{job.title} {job.description}".lower()
+    p=candidate.get('preferences') or {}; r=candidate.get('resume') or {}; parsed=r.get('parsed_json') or {}; text=f"{job.title} {job.description}".lower()
     reasons=[]; fit=0
-    roles=list(dict.fromkeys([*(p.get('target_roles') or []),*(r.get('target_roles') or []),*category.role_keywords]))
+    roles=list(dict.fromkeys([*(p.get('target_roles') or []),*(r.get('target_roles') or []),*(parsed.get('target_roles') or []),*category.role_keywords]))
     role_hits=[x for x in roles if _contains(job.title,x)]
     if role_hits:
         fit+=30; reasons.append('resume target role aligns with title')
     elif any(_contains(text,x) for x in roles):
         fit+=20; reasons.append('resume target role aligns with duties')
 
-    skills=[norm(x) for x in (r.get('skills') or []) if norm(x)]
+    resume_evidence=' '.join([str(r.get('raw_text') or ''),str(parsed.get('professional_summary') or ''),' '.join(parsed.get('projects') or []),' '.join(r.get('certifications') or [])]).lower()
+    inferred_skills=[s for s in JOB_SKILLS if _contains(resume_evidence,s)]
+    skills=list(dict.fromkeys([norm(x) for x in [*(r.get('skills') or []),*inferred_skills] if norm(x)]))
     matched=[s for s in skills if _contains(text,s)]
     if skills:
+        # Reward up to eight concrete matching skills, not sheer resume keyword volume.
         fit+=round(35*min(1,len(matched)/max(3,min(8,len(skills)))))
         if matched:reasons.append('resume skills: '+', '.join(matched[:5]))
 
-    certs=[norm(x) for x in (r.get('certifications') or []) if norm(x)]
+    certs=[norm(x) for x in [*(r.get('certifications') or []),*(parsed.get('certifications') or [])] if norm(x)]
     cert_hits=[x for x in certs if _contains(text,x)]
     if cert_hits:
         fit+=10; reasons.append('relevant certification: '+', '.join(cert_hits[:2]))
 
-    educ=' '.join(r.get('education') or []).lower()
+    educ=' '.join([*(r.get('education') or []),*(parsed.get('education') or [])]).lower()
     if re.search(r'computer science|\bcse\b|information technology|\bit\b',educ+' '+str(r.get('raw_text') or '')[:6000].lower()):
         if re.search(r'computer science|\bcse\b|information technology|\bit\b|b\.?e|b\.?tech',text):
             fit+=8; reasons.append('education aligns with eligibility')
@@ -104,6 +110,7 @@ def personalized_score(job, category, base_score, candidate):
 
     fit=max(0,min(100,fit))
     final=round((base_score*0.5)+(fit*0.5))
+    # A strong rules/AI score should never be hidden solely because a sparse resume omitted keywords.
     final=max(min(base_score,88),final)
 
     job_required=[s for s in JOB_SKILLS if _contains(text,s)]

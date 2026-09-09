@@ -1,0 +1,44 @@
+name: Resume AI enrichment
+on:
+  workflow_dispatch:
+    inputs:
+      resume_id:
+        description: Resume UUID to enrich
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  copilot-requests: write
+
+concurrency:
+  group: jobradar-resume-${{ inputs.resume_id }}
+  cancel-in-progress: true
+
+jobs:
+  enrich:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: collector/requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install -r collector/requirements.txt
+      - name: Install GitHub Copilot CLI
+        run: npm install -g @github/copilot
+      - name: Extract resume with Gemini and Copilot
+        working-directory: collector
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          GITHUB_TOKEN: ${{ github.token }}
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+        run: python -m jobradar.resume_enrich --resume-id '${{ inputs.resume_id }}'

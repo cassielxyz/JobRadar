@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import html
+import re
 import httpx
 from bs4 import BeautifulSoup
 from ..models import Job, Category
+from ..scoring import semantic_gate, location_matches
 
 API = 'https://freehire.me/api/v1/agent/jobs/search'
 
@@ -39,19 +41,24 @@ def _money_monthly(x: dict, key: str):
 
 
 class FreeHireCollector:
-    """Keyless discovery across many ATS/company/job-board sources via FreeHire."""
+    """Keyless discovery across many ATS/company/job-board sources via FreeHire.
+
+    FreeHire results still pass JobRadar's own role/location/experience verification and
+    direct-link resolver before they can appear or alert.
+    """
     def __init__(self):
         self.client = httpx.Client(timeout=30, follow_redirects=True, headers={"User-Agent":"JobRadarSouth/0.7"})
 
     def _queries(self, category: Category):
         seeds = []
+        # Prefer role phrases over very broad adjacent titles.
         for term in category.role_keywords + category.hidden_keywords:
             t = ' '.join(str(term).split()).strip()
             if len(t) < 4:
                 continue
             if t.lower() not in [s.lower() for s in seeds]:
                 seeds.append(t)
-            if len(seeds) >= 7:
+            if len(seeds) >= 4:
                 break
         return seeds
 
@@ -61,7 +68,7 @@ class FreeHireCollector:
             'countries': 'IN',
             'posted_within_days': '30',
             'description_format': 'text',
-            'limit': '40',
+            'limit': '25',
             'sort': 'posted_at',
             'order': 'desc',
         }
@@ -104,6 +111,7 @@ class FreeHireCollector:
                     description=description,
                     employment_type=employment,
                     source_id=source_id,
+                    # Treat the actual posting as the source for direct-link trust checks.
                     source_url=url,
                     canonical_url=url,
                     salary_min_monthly=_money_monthly(x, 'salary_min'),
@@ -111,7 +119,13 @@ class FreeHireCollector:
                     posted_at=x.get('posted_at') or x.get('created_at') or x.get('updated_at'),
                     raw={**x, 'discovered_via': 'freehire', 'query': query, 'source_kind': 'job_board'},
                 )
+                relevant, _ = semantic_gate(job, category)
+                if not relevant:
+                    continue
+                if job.location and not location_matches(job.location, category.locations):
+                    if 'remote' not in job.location.lower():
+                        continue
                 out.append(job)
-                if len(out) >= 220:
+                if len(out) >= 30:
                     return out
         return out
