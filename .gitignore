@@ -1,8 +1,23 @@
+# Local environments and secrets
 .env
 .env.local
 .env.*.local
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+
+# Local AI/editor state
+.aicb/
+
+# Dependencies and builds
 node_modules/
 .next/
+
+# Python
 __pycache__/
 *.py[cod]
+
+# OS
 .DS_Store
