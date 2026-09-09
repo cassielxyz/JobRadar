@@ -1,32 +1,102 @@
-# JobRadar South  [![Job research](https://github.com/cassielxyz/JobRadar/actions/workflows/research.yml/badge.svg)](https://github.com/cassielxyz/JobRadar/actions/workflows/research.yml)
+<p align="center"><img src="assets/readme-hero.svg" alt="JobRadar" width="100%"></p>
 
-A free-first automated South India job research dashboard for fresher cybersecurity, networking and cloud-networking opportunities.
+# JobRadar
 
-## Included
-- Four seeded categories: Government/PSU, Startup Fresher, Entry-level Companies, Paid Internships
-- Unlimited dashboard-created categories
-- Government/PSU + ATS/company + optional Agent Reach discovery
-- direct-apply-link resolution and official-notification separation
-- deterministic scoring + Gemini + GitHub Copilot review
-- Supabase persistence
-- GitHub Actions scheduled research
-- professional responsive Next.js dashboard
-- **Google sign-in with an owner email allowlist**
-- free notification stack: **ntfy + Telegram + Email only**
+JobRadar is an automated job-discovery and verification workspace designed to collect opportunities, classify them into useful dashboards, and present them through a web application instead of relying on manual daily searches.
 
-## Dashboard access
-Run locally from `apps/web` or deploy that folder to Vercel. The dashboard now opens on a Google sign-in screen and only emails listed in `AUTHORIZED_EMAILS` can enter. Full instructions are in `SETUP.md`.
+The repository combines a Next.js frontend, Supabase-backed application data, scheduled GitHub Actions research, and server routes for jobs, categories, settings, authentication, and controlled research execution.
 
-## Current migrations
-Run `001_init.sql`, `002_direct_apply_links.sql`, `003_ai_review.sql`, `004_notification_settings.sql`, and `005_google_auth.sql` in order.
+## Product goals
 
-## Security model
-- Supabase service-role credentials remain server-only.
-- Browser authentication uses the Supabase publishable/anon key.
-- Dashboard pages and API routes require a valid Supabase Google session.
-- An authenticated Google account must also be present in `AUTHORIZED_EMAILS`.
-- Migration 005 removes anonymous read policies from dashboard data.
-- GitHub Actions continues to use the service-role key for collector writes.
+- Discover relevant openings on a recurring schedule.
+- Separate opportunities into focused dashboards rather than one unfiltered feed.
+- Preserve source/application links and enough metadata for verification.
+- Support authenticated access and user settings.
+- Make the research workflow reproducible through automation.
 
-## Verification principle
-Community/social sources are discovery inputs. Government alerts require official verification when configured, and high-priority alerts require a verified direct application URL. Compensation is never invented when it is not disclosed.
+## Architecture
+
+```text
+GitHub Actions research workflow
+            |
+            v
+      Research / ingestion
+            |
+            v
+         Supabase
+            |
+      +-----+------+
+      |            |
+      v            v
+ Next.js API    Auth/session
+      |            |
+      +-----+------+
+            v
+       Web dashboard
+```
+
+## Repository layout
+
+| Path | Responsibility |
+| --- | --- |
+| `apps/web/app/` | Next.js routes and UI |
+| `apps/web/app/api/jobs/` | Job API surface |
+| `apps/web/app/api/categories/` | Dashboard/category API |
+| `apps/web/app/api/settings/` | User settings API |
+| `apps/web/app/api/run/` | Controlled research execution endpoint |
+| `apps/web/lib/` | Authentication and Supabase helpers |
+| `.github/workflows/research.yml` | Scheduled/automated research workflow |
+| `.github/workflows/test.yml` | CI checks |
+| `.env.example` | Safe configuration template |
+| `SETUP.md` | Expanded setup instructions |
+
+## Configuration
+
+Copy the example environment file into a local ignored environment file and provide your own development values. Never commit service-role credentials, database passwords, private API tokens, or production authentication secrets.
+
+```bash
+cp .env.example .env.local
+```
+
+Use GitHub Actions secrets for workflow credentials and the deployment provider's protected environment settings for production values.
+
+## Local development
+
+The web application lives under `apps/web`.
+
+```bash
+cd apps/web
+npm install
+npm run dev
+```
+
+Before deployment, run the project's available tests and production build. See `SETUP.md` for the full environment and service configuration.
+
+## Automation
+
+`research.yml` is responsible for recurring research. A healthy automation pipeline should:
+
+1. fetch only from allowed/expected sources;
+2. validate and normalize incoming records;
+3. deduplicate jobs deterministically;
+4. retain official or trustworthy application links;
+5. write data using least-privilege credentials;
+6. fail visibly when a source changes rather than silently ingesting malformed data.
+
+## Security
+
+- Store secrets only in Supabase, deployment, or GitHub protected secret stores.
+- Keep `.env` files local; commit only examples with placeholders.
+- Enforce authorization server-side, not only in the UI.
+- Treat job descriptions and external HTML as untrusted input.
+- Validate URLs before presenting them as application destinations.
+- Never expose Supabase service-role keys to browser code.
+- Rotate any credential that has ever been committed, even if the current file is later deleted.
+
+## Reliability and data quality
+
+Automation is only useful when stale and duplicate jobs are controlled. Prefer source timestamps, deterministic identifiers, explicit verification status, and scheduled cleanup over heuristic deletion. A failed source should not invalidate unrelated sources in the same research run.
+
+## Project state
+
+The repository already includes web routes, authentication helpers, Supabase integration, GitHub Actions automation, and setup documentation. Future work should continue strengthening verification quality, source coverage, observability, and safe autonomous research rather than replacing the existing architecture with mock data.
