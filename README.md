@@ -2,67 +2,97 @@
 
 # JobRadar
 
-JobRadar is an automated job-discovery and verification workspace designed to collect opportunities, classify them into useful dashboards, and present them through a web application instead of relying on manual daily searches.
+JobRadar is a private, resume-driven job discovery and verification workspace for fresher networking, cybersecurity, cloud networking, NOC/SOC, network support and closely related infrastructure opportunities, with South India as the primary search region.
 
-The repository combines a Next.js frontend, Supabase-backed application data, scheduled GitHub Actions research, and server routes for jobs, categories, settings, authentication, and controlled research execution.
+[![Job research](https://github.com/cassielxyz/JobRadar/actions/workflows/research.yml/badge.svg)](https://github.com/cassielxyz/JobRadar/actions/workflows/research.yml)
 
-## Product goals
+## v0.7 — Resume-driven matching
 
-- Discover relevant openings on a recurring schedule.
-- Separate opportunities into focused dashboards rather than one unfiltered feed.
-- Preserve source/application links and enough metadata for verification.
-- Support authenticated access and user settings.
-- Make the research workflow reproducible through automation.
+- Upload PDF, DOCX or TXT resumes from the dashboard.
+- Extract resume text, skills, education, certifications and target roles server-side.
+- Save multiple resumes and switch the active resume at any time.
+- Select preferred locations, target roles, exclusions, experience and salary/stipend targets.
+- Sync settings to Supabase with a single Save changes action.
+- Use the active resume and saved preferences to expand discovery and calculate personalized match scores.
+- Show resume-fit evidence and skill gaps on verified job cards.
+- Save jobs and track applications.
+- Queue private-sector applications above a configurable high-confidence threshold (default 95%).
+- Optional safe auto-submit is limited to recognized Greenhouse, Lever and Ashby forms and stops for CAPTCHA, unknown required fields, or sensitive questions.
+- Government/PSU applications are always manual.
+- Notifications use ntfy, Telegram and email.
+- Google sign-in plus an authorized-email allowlist protects the dashboard.
 
-## Architecture
+## Discovery pipeline
 
 ```text
-GitHub Actions research workflow
-            |
-            v
-      Research / ingestion
-            |
-            v
-         Supabase
-            |
-      +-----+------+
-      |            |
-      v            v
- Next.js API    Auth/session
-      |            |
-      +-----+------+
-            v
-       Web dashboard
+Official portals + ATS/company sources + FreeHire + optional Agent Reach/Exa
+                              |
+                              v
+                   Verify liveness/direct links
+                              |
+                              v
+                  Deterministic relevance rules
+                              |
+                              v
+                   Gemini / Copilot review
+                              |
+                              v
+                 Active-resume personalized score
+                              |
+                              v
+                         Supabase
+                    /       |       \
+                   v        v        v
+             Web dashboard ntfy  Telegram/Email
 ```
+
+## Starter categories
+
+1. Government / PSU
+2. Startup Fresher Jobs
+3. Entry-level Companies
+4. Paid Internships
+
+Custom categories can also be created from the dashboard.
 
 ## Repository layout
 
 | Path | Responsibility |
 | --- | --- |
-| `apps/web/app/` | Next.js routes and UI |
-| `apps/web/app/api/jobs/` | Job API surface |
-| `apps/web/app/api/categories/` | Dashboard/category API |
-| `apps/web/app/api/settings/` | User settings API |
-| `apps/web/app/api/run/` | Controlled research execution endpoint |
-| `apps/web/lib/` | Authentication and Supabase helpers |
-| `.github/workflows/research.yml` | Scheduled/automated research workflow |
-| `.github/workflows/test.yml` | CI checks |
-| `.env.example` | Safe configuration template |
-| `SETUP.md` | Expanded setup instructions |
+| `apps/web/` | Next.js dashboard, Google-authenticated API routes, resume management and settings |
+| `collector/` | Discovery, verification, scoring, AI review, notifications and safe auto-apply runner |
+| `config/sources.yaml` | Official and discovery source registry |
+| `supabase/migrations/` | Database, auth, precision, resume/preferences and application tracking schema |
+| `.github/workflows/research.yml` | Scheduled research and notification test workflow |
+| `.github/workflows/auto-apply.yml` | Optional safe application queue processor |
+| `.github/workflows/test.yml` | CI tests |
+| `SETUP.md` | Full deployment and configuration instructions |
 
-## Configuration
+## Upgrade from v0.6
 
-Copy the example environment file into a local ignored environment file and provide your own development values. Never commit service-role credentials, database passwords, private API tokens, or production authentication secrets.
+If migrations 001–006 are already applied, run only:
 
-```bash
-cp .env.example .env.local
+```text
+supabase/migrations/007_resume_preferences_auto_apply.sql
 ```
 
-Use GitHub Actions secrets for workflow credentials and the deployment provider's protected environment settings for production values.
+If migration 006 has not been applied yet, run 006 first and then 007.
+
+Keep the GitHub repository variable `AUTO_APPLY_RUNNER_ENABLED=false` until the active resume and match quality have been reviewed. Final auto-submit is also separately opt-in from the dashboard.
+
+## Security
+
+- Store secrets only in Supabase, Vercel or GitHub protected secret stores.
+- Keep `.env` files local; commit only examples with placeholders.
+- Never expose the Supabase service-role key or GitHub dispatch token to browser code.
+- Enforce authorization server-side, not only in the UI.
+- Treat job descriptions and external HTML as untrusted input.
+- Community/social sources are discovery inputs, not trusted final application destinations.
+- Verify application URLs before presenting or alerting them.
+- Auto-apply never attempts to bypass CAPTCHA or invent answers to unknown/sensitive questions.
+- Rotate any credential that has ever been committed, even if the current file is later deleted.
 
 ## Local development
-
-The web application lives under `apps/web`.
 
 ```bash
 cd apps/web
@@ -70,33 +100,4 @@ npm install
 npm run dev
 ```
 
-Before deployment, run the project's available tests and production build. See `SETUP.md` for the full environment and service configuration.
-
-## Automation
-
-`research.yml` is responsible for recurring research. A healthy automation pipeline should:
-
-1. fetch only from allowed/expected sources;
-2. validate and normalize incoming records;
-3. deduplicate jobs deterministically;
-4. retain official or trustworthy application links;
-5. write data using least-privilege credentials;
-6. fail visibly when a source changes rather than silently ingesting malformed data.
-
-## Security
-
-- Store secrets only in Supabase, deployment, or GitHub protected secret stores.
-- Keep `.env` files local; commit only examples with placeholders.
-- Enforce authorization server-side, not only in the UI.
-- Treat job descriptions and external HTML as untrusted input.
-- Validate URLs before presenting them as application destinations.
-- Never expose Supabase service-role keys to browser code.
-- Rotate any credential that has ever been committed, even if the current file is later deleted.
-
-## Reliability and data quality
-
-Automation is only useful when stale and duplicate jobs are controlled. Prefer source timestamps, deterministic identifiers, explicit verification status, and scheduled cleanup over heuristic deletion. A failed source should not invalidate unrelated sources in the same research run.
-
-## Project state
-
-The repository already includes web routes, authentication helpers, Supabase integration, GitHub Actions automation, and setup documentation. Future work should continue strengthening verification quality, source coverage, observability, and safe autonomous research rather than replacing the existing architecture with mock data.
+See `SETUP.md` for Supabase migrations, Google OAuth, Vercel variables, GitHub Actions secrets/variables, resume setup, notification tests and the first resume-driven research run.

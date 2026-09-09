@@ -1,26 +1,98 @@
-import os, subprocess, shlex, json
-from ..models import Job
+from __future__ import annotations
+
+import json
+import os
+import re
+import shutil
+import subprocess
+from urllib.parse import urlparse
+from ..models import Job, Category
+
+URL_RE = re.compile(r'https?://[^\s\]\)\}"\']+')
+SOCIAL = ('linkedin.com','reddit.com','x.com','twitter.com','instagram.com','facebook.com')
+
+
+def _host(url: str) -> str:
+    return (urlparse(url).hostname or '').lower()
+
+
+def _walk(obj):
+    if isinstance(obj, dict):
+        if obj.get('url'):
+            yield obj
+        for v in obj.values():
+            yield from _walk(v)
+    elif isinstance(obj, list):
+        for v in obj:
+            yield from _walk(v)
+
 
 class AgentReachCollector:
-    """Optional discovery adapter. It executes explicitly configured commands.
-    Agent Reach itself configures upstream platform tools; it is not assumed to expose a universal search API.
+    """Optional Exa/web discovery through Agent Reach's configured upstream tools.
+
+    Agent Reach is a router/installer, so JobRadar calls mcporter/Exa directly when that
+    backend is actually available. Failure is non-fatal because FreeHire and direct sources
+    remain active.
     """
-    def collect_command(self, command_template, query, source_id='agent-reach'):
-        if os.getenv('AGENT_REACH_ENABLED','false').lower() != 'true': return []
-        args=[part.replace('{query}', query) for part in command_template]
-        p=subprocess.run(args, capture_output=True, text=True, timeout=90, check=False)
-        if p.returncode != 0: return []
-        text=p.stdout.strip(); out=[]
+    def enabled(self):
+        return os.getenv('AGENT_REACH_ENABLED','false').lower() == 'true'
+
+    def available(self):
+        return self.enabled() and bool(shutil.which('mcporter'))
+
+    def _queries(self, category: Category):
+        loc = ' '.join(category.locations[:8]) or 'Chennai Tamil Nadu Bengaluru Bangalore Kerala'
+        terms = []
+        for x in category.role_keywords[:5]:
+            terms.append(f'"{x}" fresher entry level {loc} careers apply')
+        if category.type == 'internship':
+            terms = [f'"{x}" internship stipend {loc} careers apply' for x in category.role_keywords[:5]]
+        elif category.type == 'startup':
+            terms = [f'"{x}" startup fresher {loc} careers jobs' for x in category.role_keywords[:5]]
+        return terms
+
+    def _call_exa(self, query: str):
+        if not self.available():
+            return []
+        cmd = ['mcporter','call','exa.web_search_exa',f'query={query}','numResults=8']
         try:
-            data=json.loads(text)
-            if isinstance(data,list):
-                for x in data:
-                    url=x.get('url') or x.get('html_url') or ''
-                    title=x.get('title') or x.get('name') or str(x)[:120]
-                    if url: out.append(Job(title=title,company='Community discovery',location='',description=str(x),source_id=source_id,source_url=url,canonical_url=url,raw=x))
+            p = subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False)
+        except Exception:
+            return []
+        if p.returncode != 0 or not p.stdout.strip():
+            return []
+        text = p.stdout.strip()
+        rows = []
+        try:
+            obj = json.loads(text)
+            for x in _walk(obj):
+                url = str(x.get('url') or '').strip()
+                title = str(x.get('title') or x.get('name') or '').strip()
+                snippet = str(x.get('text') or x.get('snippet') or x.get('description') or '')
+                if url:
+                    rows.append((title, url, snippet, x))
         except Exception:
             for line in text.splitlines():
-                if 'http' in line:
-                    url=line[line.find('http'):].split()[0]
-                    out.append(Job(title=line[:160],company='Community discovery',location='',description=line,source_id=source_id,source_url=url,canonical_url=url))
+                for url in URL_RE.findall(line):
+                    rows.append((line[:180], url, line[:1000], {'raw_line': line}))
+        return rows
+
+    def collect(self, category: Category, source_id='agent-reach'):
+        out, seen = [], set()
+        for query in self._queries(category):
+            for title, url, snippet, raw in self._call_exa(query):
+                if not url or url in seen:
+                    continue
+                seen.add(url)
+                company = 'Web discovery'
+                if any(_host(url).endswith(d) for d in SOCIAL):
+                    company = 'Community / social discovery'
+                out.append(Job(
+                    title=(title or snippet or url)[:240], company=company, location='',
+                    description=(snippet or title)[:6000], source_id=source_id,
+                    source_url=url, canonical_url=url,
+                    raw={'discovered_via':'agent-reach-exa','query':query,'result':raw,'source_kind':'community'}
+                ))
+                if len(out) >= 80:
+                    return out
         return out

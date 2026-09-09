@@ -1,41 +1,46 @@
 sources:
-  # Government / PSU / public sector — authoritative discovery roots.
   - id: tnpsc
     name: TNPSC
     kind: government
     url: https://www.tnpsc.gov.in/English/Notification.aspx
     official_domains: [tnpsc.gov.in]
     priority: 100
+    config: {default_location: Tamil Nadu}
   - id: tn-careers
     name: Tamil Nadu Career Services
     kind: government
     url: https://tamilnaducareerservices.tn.gov.in/
     official_domains: [tamilnaducareerservices.tn.gov.in]
     priority: 95
+    config: {default_location: Tamil Nadu}
   - id: kerala-psc
     name: Kerala PSC
     kind: government
     url: https://www.keralapsc.gov.in/notifications
     official_domains: [keralapsc.gov.in]
     priority: 100
+    config: {default_location: Kerala}
   - id: kerala-cmd
     name: Kerala CMD
     kind: government
     url: https://cmd.kerala.gov.in/recruitment/
     official_domains: [cmd.kerala.gov.in]
     priority: 95
+    config: {default_location: Kerala}
   - id: kerala-itmission
     name: Kerala State IT Mission
     kind: government
     url: https://careers-itmission.kerala.gov.in/
     official_domains: [careers-itmission.kerala.gov.in, itmission.kerala.gov.in]
     priority: 100
+    config: {default_location: Kerala}
   - id: tanfinet
     name: TANFINET
     kind: government
     url: https://tanfinet.tn.gov.in/pages/view/careers
     official_domains: [tanfinet.tn.gov.in]
     priority: 100
+    config: {default_location: Tamil Nadu}
   - id: drdo
     name: DRDO Vacancies
     kind: government
@@ -72,6 +77,7 @@ sources:
     url: https://www.rrbchennai.gov.in/
     official_domains: [rrbchennai.gov.in]
     priority: 100
+    config: {default_location: Tamil Nadu}
   - id: bsnl
     name: BSNL Careers
     kind: psu
@@ -84,23 +90,40 @@ sources:
     url: https://www.ecil.co.in/jobs.html
     official_domains: [ecil.co.in]
     priority: 95
-
-  # ATS/source templates. Add concrete boards in the dashboard/source table.
+  - id: freehire
+    name: FreeHire discovery
+    kind: job_board
+    url: https://freehire.me/api/v1/agent/jobs/search
+    official_domains: [freehire.me]
+    priority: 90
+    config: {provider: freehire}
+  - id: agent-reach
+    name: Agent Reach / Exa discovery
+    kind: community
+    url: https://github.com/Panniantong/Agent-Reach
+    official_domains: []
+    priority: 70
+    config: {provider: agent_reach}
   - id: greenhouse
-    name: Greenhouse Boards
+    name: Greenhouse Board Template
     kind: ats
     url: https://boards.greenhouse.io/
     official_domains: [greenhouse.io]
-    priority: 80
+    priority: 40
+    enabled: false
+    config: {provider: greenhouse}
   - id: lever
-    name: Lever Jobs
+    name: Lever Board Template
     kind: ats
     url: https://jobs.lever.co/
     official_domains: [lever.co]
-    priority: 80
+    priority: 40
+    enabled: false
+    config: {provider: lever}
   - id: ashby
-    name: Ashby Jobs
+    name: Ashby Board Template
     kind: ats
     url: https://jobs.ashbyhq.com/
     official_domains: [ashbyhq.com]
-    priority: 80
+    priority: 40
+    enabled: false

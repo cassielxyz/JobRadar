@@ -1,8 +1,17 @@
 name: Job research
 on:
   schedule:
-    - cron: '35 1,7,13 * * *' # 07:05, 12:35, 18:35 IST approx; GitHub schedules may be delayed.
+    - cron: '35 1,7,13 * * *' # ~07:05, 12:35, 18:35 IST; scheduled Actions can be delayed.
   workflow_dispatch:
+    inputs:
+      mode:
+        description: What should JobRadar run?
+        required: true
+        default: research
+        type: choice
+        options:
+          - research
+          - test-notifications
 
 permissions:
   contents: read
@@ -15,7 +24,7 @@ concurrency:
 jobs:
   research:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -27,15 +36,38 @@ jobs:
         with:
           node-version: '22'
       - run: pip install -r collector/requirements.txt
+
       - name: Install GitHub Copilot CLI
-        if: ${{ vars.AI_MODE != 'rules' && vars.AI_MODE != 'gemini' }}
+        if: ${{ (github.event_name != 'workflow_dispatch' || inputs.mode != 'test-notifications') && vars.AI_MODE != 'rules' && vars.AI_MODE != 'gemini' }}
         run: npm install -g @github/copilot
-      - name: Optional Agent Reach install
-        if: ${{ vars.AGENT_REACH_ENABLED == 'true' }}
+
+      - name: Optional Agent Reach setup
+        if: ${{ (github.event_name != 'workflow_dispatch' || inputs.mode != 'test-notifications') && vars.AGENT_REACH_ENABLED == 'true' }}
         run: |
           pip install https://github.com/Panniantong/agent-reach/archive/main.zip
-          agent-reach install --env=auto || true
+          agent-reach install --env=auto --system || true
+          mcporter config add exa --url https://mcp.exa.ai/mcp --scope home || true
+          agent-reach doctor --json || true
+          mcporter call exa.web_search_exa query="JobRadar connectivity test" numResults=1 >/dev/null || true
+
+      - name: Test notification channels
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'test-notifications' }}
+        working-directory: collector
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          NTFY_SERVER: ${{ vars.NTFY_SERVER }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          SMTP_HOST: ${{ vars.SMTP_HOST }}
+          SMTP_PORT: ${{ vars.SMTP_PORT }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          ALERT_EMAIL_FROM: ${{ vars.ALERT_EMAIL_FROM }}
+          ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
+        run: python -m jobradar.notify_test
+
       - name: Research, verify, dual-AI review, score and alert
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode != 'test-notifications' }}
         working-directory: collector
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -44,7 +76,7 @@ jobs:
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
           AI_MODE: ${{ vars.AI_MODE }}
           AI_REVIEW_MIN_SCORE: ${{ vars.AI_REVIEW_MIN_SCORE }}
-          # Copilot CLI can authenticate in Actions with this short-lived built-in token.
+          DASHBOARD_MIN_SCORE: ${{ vars.DASHBOARD_MIN_SCORE }}
           GITHUB_TOKEN: ${{ github.token }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

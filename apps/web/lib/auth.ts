@@ -14,7 +14,7 @@ export function emailIsAuthorized(email?: string | null){
 }
 
 export async function getAuthorizedUser(){
-  const supabase = createServerSupabase();
+  const supabase = await createServerSupabase();
   const {data:{user},error} = await supabase.auth.getUser();
   if(error || !user) return {user:null,status:401 as const};
   if(!emailIsAuthorized(user.email)) return {user:null,status:403 as const};

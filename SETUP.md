@@ -1,133 +1,71 @@
-# JobRadar South — Setup
+# JobRadar South v0.7 — Setup
 
-## 1. Supabase database
-Run these files in **Supabase → SQL Editor** in order:
+## 1. Supabase migrations
 
-1. `supabase/migrations/001_init.sql`
-2. `supabase/migrations/002_direct_apply_links.sql`
-3. `supabase/migrations/003_ai_review.sql`
-4. `supabase/migrations/004_notification_settings.sql`
-5. `supabase/migrations/005_google_auth.sql`
+Run in **Supabase → SQL Editor** in order for a new project:
 
-If you already ran 001–004, run **only `005_google_auth.sql` now**.
+1. `001_init.sql`
+2. `002_direct_apply_links.sql`
+3. `003_ai_review.sql`
+4. `004_notification_settings.sql`
+5. `005_google_auth.sql`
+6. `006_precision_discovery_notifications.sql`
+7. `007_resume_preferences_auto_apply.sql`
 
-Migration 005 removes the old anonymous read policies. The collector still works because GitHub Actions uses the service-role key, while the dashboard requires an authenticated Google session.
+If v0.6 is already running, run **only migration 007**.
 
-### Server-only Supabase values
-For GitHub Actions and the Vercel server routes:
+Migration 007 creates private resume/profile/application data and the private `resumes` Storage bucket. Resume files are not public.
 
-- `SUPABASE_URL` — Supabase **Settings → Data API → Project URL / API URL**
-- `SUPABASE_SERVICE_ROLE_KEY` — Supabase **Settings → API Keys → Legacy anon, service_role API keys → service_role**
+## 2. Vercel dashboard environment
 
-Keep `SUPABASE_SERVICE_ROLE_KEY` private. Never place it in a `NEXT_PUBLIC_` variable, browser code, screenshots, or Git commits.
+Vercel project root directory: `apps/web`
 
-## 2. Enable Google login in Supabase
-JobRadar now uses **Supabase Auth + Google OAuth** instead of the old dashboard admin token.
-
-### A. Create Google OAuth credentials
-In Google Cloud Console:
-
-1. Create/select a project.
-2. Configure the OAuth consent screen.
-3. Create an **OAuth 2.0 Client ID** for a Web application.
-4. In Supabase open **Authentication → Providers → Google**.
-5. Supabase shows the callback/redirect URL that Google must allow. Add that exact Supabase callback URL to the Google OAuth client's **Authorized redirect URIs**.
-6. Copy the Google Client ID and Client Secret into the Supabase Google provider and enable it.
-
-Do not put the Google Client Secret into the JobRadar frontend. Supabase stores/uses it for the provider.
-
-### B. Configure Supabase URL settings
-Open **Supabase → Authentication → URL Configuration**.
-
-During local development:
-
-- Site URL: `http://localhost:3000`
-- Add redirect URL: `http://localhost:3000/auth/callback`
-
-After Vercel deployment also add:
-
-- `https://YOUR-VERCEL-DOMAIN.vercel.app/auth/callback`
-
-If you later add a custom domain, add its `/auth/callback` URL too.
-
-### C. Browser-safe Supabase values
-In **Supabase → Settings → API Keys**, copy the **Publishable key**. This key is designed for browser use and is not the service-role secret.
-
-JobRadar web app needs:
+Required:
 
 ```text
+SUPABASE_URL=https://YOUR-PROJECT.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=...
 NEXT_PUBLIC_SUPABASE_URL=https://YOUR-PROJECT.supabase.co
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLISHABLE_KEY
-AUTHORIZED_EMAILS=your-google-account@gmail.com
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+AUTHORIZED_EMAILS=your-google-email@gmail.com
+GITHUB_REPOSITORY=owner/JobRadar
+GITHUB_DISPATCH_TOKEN=github_pat_...
 ```
 
-`AUTHORIZED_EMAILS` is a comma-separated allowlist. Example:
+Optional but recommended for better resume extraction:
 
 ```text
-AUTHORIZED_EMAILS=you@gmail.com,second-account@gmail.com
+GEMINI_API_KEY=...
+GEMINI_MODEL=gemini-3.1-flash-lite
 ```
 
-Only a Google account whose email appears in this variable can enter the dashboard. Authentication alone is not enough.
+Without a Gemini key in Vercel, resume upload still works using deterministic extraction.
 
-For older Supabase projects you may use `NEXT_PUBLIC_SUPABASE_ANON_KEY` instead of `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. The current project checks the publishable key first.
+Never expose the service-role key or dispatch token using a `NEXT_PUBLIC_` prefix.
 
-## 3. Gemini + GitHub Copilot
-Add GitHub secret:
+## 3. Google login
 
-- `GEMINI_API_KEY`
+In **Supabase → Authentication → Sign In / Providers → Google**:
 
-Recommended repository variables:
+- Enable Google.
+- Paste Google OAuth Client ID.
+- Paste Google OAuth Client Secret.
+- Keep **Skip nonce checks** OFF.
+- Keep **Allow users without an email** OFF.
 
-- `AI_MODE=auto`
-- `AI_REVIEW_MIN_SCORE=45`
-- `GEMINI_MODEL=gemini-2.5-flash-lite`
-- `AGENT_REACH_ENABLED=true` (optional)
+Register the Supabase callback shown there in Google Cloud, e.g.:
 
-Copilot CLI uses the GitHub Actions token when the account/repository has the required Copilot access. If Copilot is unavailable, Gemini + deterministic rules continue.
+`https://YOUR-PROJECT.supabase.co/auth/v1/callback`
 
-## 4. Free notification stack
-JobRadar uses only **ntfy + Telegram + Email**.
+In **Supabase → Authentication → URL Configuration**:
 
-### ntfy
-Install the ntfy mobile app and subscribe to a hard-to-guess topic. Add:
+- Production Site URL: your Vercel domain.
+- Add `https://YOUR-VERCEL-DOMAIN/auth/callback`.
+- For local development also allow `http://localhost:3000/auth/callback`.
 
-GitHub secret:
-- `NTFY_TOPIC`
+## 4. GitHub Actions secrets
 
-GitHub variable:
-- `NTFY_SERVER=https://ntfy.sh`
-
-Use a random topic rather than your name or phone number.
-
-### Telegram
-Create a bot with BotFather, start it once from your Telegram account, obtain your chat ID, and add GitHub secrets:
-
-- `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_CHAT_ID`
-
-### Email (Gmail example)
-Enable 2-Step Verification on the sending Google account and create an App Password.
-
-GitHub secrets:
-- `SMTP_USERNAME`
-- `SMTP_PASSWORD`
-- `ALERT_EMAIL_TO`
-
-Repository variables:
-- `SMTP_HOST=smtp.gmail.com`
-- `SMTP_PORT=587`
-- `ALERT_EMAIL_FROM=<sender email>`
-
-All three channels can be enabled together.
-
-## 5. Push to GitHub
-Push the complete project to a GitHub repository.
-
-The workflow `.github/workflows/research.yml` runs the collector three times per day and can also be started manually from:
-
-**GitHub → Actions → Job research → Run workflow**
-
-Required GitHub Actions secrets include:
+**Repository → Settings → Secrets and variables → Actions → Secrets**
 
 ```text
 SUPABASE_URL
@@ -141,103 +79,103 @@ SMTP_PASSWORD
 ALERT_EMAIL_TO
 ```
 
-Notification secrets are optional individually; configure the channels you want to use.
+Notification secrets are optional individually. Configure all three to receive ntfy + Telegram + Email.
 
-## 6. Access the dashboard locally
-From the project root:
+## 5. GitHub repository variables
 
-```bash
-cd apps/web
-npm install
-```
-
-Create `apps/web/.env.local`:
+Under **Actions → Variables**:
 
 ```text
-SUPABASE_URL=https://YOUR-PROJECT.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVICE_ROLE_KEY
-NEXT_PUBLIC_SUPABASE_URL=https://YOUR-PROJECT.supabase.co
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLISHABLE_KEY
-AUTHORIZED_EMAILS=your-google-account@gmail.com
+AI_MODE=auto
+AI_REVIEW_MIN_SCORE=45
+DASHBOARD_MIN_SCORE=55
+GEMINI_MODEL=gemini-3.1-flash-lite
+AGENT_REACH_ENABLED=true
+NTFY_SERVER=https://ntfy.sh
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+ALERT_EMAIL_FROM=yourgmail@gmail.com
+AUTO_APPLY_RUNNER_ENABLED=false
 ```
 
-Then run:
+Keep `AUTO_APPLY_RUNNER_ENABLED=false` until you have uploaded and reviewed a resume, saved your application profile, and tested the application queue. Change it to `true` only when you want the separate safe auto-apply workflow to run.
 
-```bash
-npm run dev
-```
+## 6. Upload the first resume
 
-Open:
+Open the Vercel dashboard and sign in with the authorized Google account.
+
+1. **Settings → Resumes**.
+2. Upload a text-based PDF, DOCX or TXT resume (max 10 MB).
+3. JobRadar extracts the text and shows detected profile details.
+4. Add more resumes if useful (for example `Network & NOC`, `SOC & Cybersecurity`, `Cloud Support`).
+5. Click **Use this** to switch active resume.
+
+Scanned/image-only PDFs are intentionally rejected when there is too little extractable text. Export the resume as a normal PDF/DOCX instead.
+
+## 7. Save job preferences
+
+Open **Settings → Job preferences**:
+
+- select Chennai, Tamil Nadu, Bengaluru, Kerala, Kochi, Coimbatore, Thiruvananthapuram, Remote, or add custom locations;
+- edit target roles and excluded terms;
+- set max experience years;
+- set desired salary and internship stipend bands;
+- choose remote/hybrid options.
+
+Press the global **Save changes** button. The next GitHub research run automatically uses those saved preferences and the active resume.
+
+## 8. Auto apply
+
+Open **Settings → Auto Apply**.
+
+Recommended first setup:
 
 ```text
-http://localhost:3000
+Queue applications automatically: ON
+Match threshold: 95
+Allow final auto-submit: OFF
 ```
 
-You should see the **Continue with Google** page instead of the dashboard. After login:
+This means JobRadar may place very strong private-sector matches in the application queue but will not submit anything yet.
 
-- authorized email → dashboard
-- other Google email → Access Restricted page
-- Sign out → back to login
+Fill the application profile (phone, portfolio/GitHub/LinkedIn if desired, work authorization/sponsorship answers) and **Save changes**.
 
-The previous `DASHBOARD_ADMIN_TOKEN` prompt has been completely removed.
+When you are satisfied with the quality of queued applications:
 
-## 7. Deploy the private dashboard to Vercel
-1. Import the GitHub repository into Vercel.
-2. Set **Root Directory** to `apps/web`.
-3. Add these Vercel environment variables:
+1. optionally enable **Allow final auto-submit** in the dashboard;
+2. set GitHub repository variable `AUTO_APPLY_RUNNER_ENABLED=true`.
 
-```text
-SUPABASE_URL
-SUPABASE_SERVICE_ROLE_KEY
-NEXT_PUBLIC_SUPABASE_URL
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-AUTHORIZED_EMAILS
-```
+The runner currently supports direct form attempts only for recognized Greenhouse, Lever and Ashby pages. Government/PSU jobs, captchas, unknown required questions and required sensitive demographic questions are moved to **Review required**.
 
-4. Deploy.
-5. Copy the final Vercel domain.
-6. Return to **Supabase → Authentication → URL Configuration** and add:
-   `https://YOUR-VERCEL-DOMAIN.vercel.app/auth/callback`
-7. Set the production Site URL to your Vercel/custom domain when ready.
-8. Test Google login in a private/incognito browser window.
+## 9. Notifications
 
-Optional dashboard-triggered cloud runs use these additional Vercel server variables:
+JobRadar supports only the free-first stack:
 
-```text
-GITHUB_REPOSITORY=owner/repository
-GITHUB_DISPATCH_TOKEN=...
-```
+- ntfy
+- Telegram
+- Email / SMTP
 
-Scheduled GitHub Actions do not need them.
+The Notifications settings include a minimum score and a **Send test notifications** action. Normal job alerts require a qualifying new verified match.
 
-## 8. What is protected now
-The following are protected by a valid Supabase Google session plus your email allowlist:
+## 10. Run research
 
-- dashboard home
-- job results
-- research categories
-- category creation/updates
-- notification settings
-- manual cloud-run API
+From the dashboard press **Run research**, or in GitHub:
 
-The API routes independently verify the session, so bypassing the UI does not grant access.
+**Actions → Job research → Run workflow → mode=research**.
 
-The database migration also removes anonymous read access from categories, jobs, matches, sources, research runs and notification settings.
+Discovery now uses:
 
-## 9. Dashboard behavior
-The interface remains professional and icon-based with no decorative emoji. It includes:
+- official/seeded portals;
+- FreeHire public API for broad company/startup discovery;
+- Agent Reach/Exa when enabled;
+- active-resume and saved target-role query expansion.
 
-- Google account identity and Sign out
-- all/current matches
-- verified direct Apply button
-- separate official government notification link
-- match score and AI review confidence
-- research category sidebar
-- New Category builder
-- notification overview for ntfy, Telegram and Email
-- responsive phone/desktop layout
+The collector calculates both category relevance and resume fit, then stores the personalized final score.
 
-## 10. Add research categories
-Dashboard → **New category**.
+## 11. Automatic schedules
 
-Configure role keywords, adjacent/hidden titles, exclusions, locations, maximum experience, salary/stipend targets, source types and alert threshold. The next scheduled research run automatically scores new discoveries against the category.
+`research.yml` runs three times per day.
+
+`auto-apply.yml` checks queued applications every three hours, but the job itself runs only when repository variable `AUTO_APPLY_RUNNER_ENABLED=true`.
+
+No PC needs to remain online; both workflows use GitHub-hosted runners.

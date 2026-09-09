@@ -5,7 +5,7 @@ import {emailIsAuthorized} from '@/lib/auth';
 export async function GET(request:NextRequest){
   const code=request.nextUrl.searchParams.get('code');
   const next=request.nextUrl.searchParams.get('next')||'/';
-  const supabase=createServerSupabase();
+  const supabase=await createServerSupabase();
   if(code){
     const {error}=await supabase.auth.exchangeCodeForSession(code);
     if(!error){

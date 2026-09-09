@@ -43,4 +43,6 @@ class Job:
     notification_url: Optional[str] = None
     apply_verified: bool = False
     link_confidence: int = 0
+    event_type: str = "vacancy"  # vacancy | exam_update
+    application_status: str = "unknown"  # open | closed | update | unknown
     raw: dict = field(default_factory=dict)
