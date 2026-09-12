@@ -1,0 +1,50 @@
+/* JobRadar Everywhere — mobile/Android layout hardening */
+.syncToast{position:fixed;top:max(16px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:10000;width:min(440px,calc(100vw - 28px));display:flex;align-items:flex-start;gap:11px;padding:13px 14px;border-radius:14px;border:1px solid #d9dde4;background:rgba(255,255,255,.97);box-shadow:0 18px 60px #11182724;backdrop-filter:blur(16px);animation:jrToastIn .22s ease-out}.syncToast.ok{border-color:#b7e6cf;box-shadow:0 18px 60px #10b9811f}.syncToast.error{border-color:#f0c9c9;box-shadow:0 18px 60px #ef44441c}.syncToastIcon{width:29px;height:29px;flex:0 0 29px;border-radius:999px;display:grid;place-items:center;font-size:15px;font-weight:900;background:#ecfdf5;color:#047857}.syncToast.error .syncToastIcon{background:#fff1f2;color:#be123c}.syncToastCopy{min-width:0;display:grid;gap:2px}.syncToastCopy strong{font-size:13px;color:#191c22}.syncToastCopy small{font-size:10.5px;line-height:1.45;color:#6f7681}.saveBar{transition:.2s ease}body[data-jobradar-sync="saved"] .saveBar{border-color:#a7e3c5!important;box-shadow:0 -8px 30px #10b98112!important}body[data-jobradar-sync="saved"] .saveBar .neonBtn{background:#0b7a55;border-color:#0b7a55;box-shadow:0 0 0 1px #10b98133,0 8px 22px #10b9811f}body[data-jobradar-sync="saved"] .saveBar .neonBtn::before{content:'✓';font-weight:900;margin-right:5px}@keyframes jrToastIn{from{opacity:0;transform:translate(-50%,-8px)}to{opacity:1;transform:translate(-50%,0)}}
+
+@media(max-width:700px){
+  html,body{width:100%;max-width:100%;overflow-x:hidden}
+  body:has(.overlay){overflow:hidden}
+  .shell{width:100%;max-width:100%;padding:11px 10px calc(22px + env(safe-area-inset-bottom))}
+  .top{gap:12px;margin-bottom:12px}
+  .brandMark{width:100%;min-width:0;gap:9px;align-items:center}
+  .logo{width:37px;height:37px;border-radius:10px;flex:0 0 37px}
+  .logo svg{width:22px;height:22px}
+  .brandCopy{min-width:0}
+  .wordmark{width:190px;max-width:calc(100vw - 70px)}
+  .brandCopy p{display:none}
+  .actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;width:100%}
+  .actions>.btn{width:100%;min-width:0;min-height:42px;padding:9px 8px;font-size:11px;line-height:1.15;white-space:normal}
+  .actions>.btn .icon{width:15px;height:15px}
+  .account{grid-column:1/-1;width:100%;min-width:0;justify-content:flex-start;border:1px solid #e5e7eb!important;border-radius:11px;padding:9px 10px!important;background:#fff}
+  .accountText{min-width:0;flex:1;text-align:left}.accountText b{max-width:100%;font-size:10.5px}.accountText small{font-size:9px}.signout{padding:8px 10px;font-size:10px}
+  .flash{margin:0 0 10px;padding:10px 11px;font-size:11px;line-height:1.45}
+  .statusbar{margin-bottom:11px;padding:9px 10px;gap:8px;font-size:10px;border-radius:10px}
+  .statusStats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;gap:5px 8px}.statusStats span{min-width:0}
+  .grid{display:grid;grid-template-columns:minmax(0,1fr);gap:11px}
+  .sideStack{gap:10px;min-width:0}
+  .profileCard,.sidebar{padding:13px;border-radius:12px}
+  .sidebar{overflow:hidden}.catRow{grid-template-columns:minmax(0,1fr) 38px}.cat{padding:10px}.cat span{font-size:12px}.cat small{font-size:10px}.catEdit{width:34px;height:34px}
+  .content{min-height:320px;padding:13px;border-radius:12px;overflow:hidden}
+  .sectionHead{gap:9px;padding-bottom:13px}.sectionHead h2{font-size:18px}.sectionHead p{font-size:11px;line-height:1.45}.count{font-size:10px;padding:5px 8px}
+  .jobs{grid-template-columns:minmax(0,1fr);gap:10px;padding-top:12px}.job{padding:14px;border-radius:11px;min-width:0}.jobTop{align-items:flex-start;gap:8px}.score{font-size:11px;line-height:1.35}.job h3{font-size:16px;margin:10px 0 4px;overflow-wrap:anywhere}.company{font-size:12px}.location{font-size:11px}.badges{gap:5px;margin:11px 0}.badge{font-size:10px;padding:4px 6px}.reason,.gapLine{font-size:10.5px}.links{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.applyLink,.textLink{min-height:38px;justify-content:center;text-align:center;border-radius:8px}.buttonLink{border:1px solid #e3e5e8!important;background:#fff!important}.links>*:only-child{grid-column:1/-1}
+
+  .overlay{align-items:flex-end;justify-content:center;padding:0;background:rgba(16,18,22,.42);backdrop-filter:blur(3px)}
+  .drawer,.settingsDrawer,.categoryDrawer,.applicationsDrawer{width:100%!important;max-width:none!important;height:min(94dvh,940px);max-height:94dvh;border-radius:20px 20px 0 0;padding:0 14px env(safe-area-inset-bottom);box-shadow:0 -18px 50px #0f172a25;overscroll-behavior:contain;overflow:auto}
+  .drawerHead{position:sticky;top:0;z-index:20;margin:0 -14px;padding:15px 15px 12px;background:rgba(255,255,255,.96);backdrop-filter:blur(14px);border-bottom:1px solid #edf0f3}.drawerHead h2{font-size:20px}.drawerHead .eyebrow{margin-bottom:4px}.close{width:36px;height:36px;flex:0 0 36px}
+  .settingsTabs{position:sticky;top:64px;z-index:19;display:flex!important;grid-template-columns:none!important;gap:7px;margin:0 -14px 14px;padding:9px 14px;overflow-x:auto;scrollbar-width:none;border:0;border-bottom:1px solid #edf0f3;border-radius:0;background:rgba(248,249,251,.96);backdrop-filter:blur(12px)}.settingsTabs::-webkit-scrollbar{display:none}.settingsTabs button{flex:0 0 auto;min-width:104px;min-height:36px;padding:8px 11px;border:1px solid #e2e5e9!important;border-radius:999px!important;background:#fff!important;font-size:10px;white-space:nowrap}.settingsTabs button.active{color:#fff!important;background:#16181d!important;border-color:#16181d!important;box-shadow:0 4px 14px #11182716}
+  .settingsBody{width:100%;max-width:none;margin:0;gap:11px}.settingsBody.form{margin-top:0}
+  .form{gap:11px;margin-top:14px}.form label,.integrationGroup label,.fieldLabel{font-size:11px}.form input,.form textarea,.form select,.integrationGroup input,.applicationRow select{min-height:44px;font-size:16px!important;padding:10px 11px}.form textarea{min-height:88px}
+  .split{grid-template-columns:minmax(0,1fr);gap:10px}
+  .uploadBox{grid-template-columns:34px minmax(0,1fr);padding:14px;gap:10px}.uploadButton{grid-column:1/-1;width:100%;min-height:42px}.resumeRow{grid-template-columns:38px minmax(0,1fr);gap:9px;padding:12px}.resumeControls{grid-column:1/-1;justify-content:flex-end;flex-wrap:wrap}.parsedPanel{padding:13px}.parsedHead{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;align-items:stretch}.compactBtn{width:100%;white-space:normal}.detailGrid{grid-template-columns:minmax(0,1fr);gap:7px}.detailGrid span{padding:10px}.chips{gap:6px}.chip{font-size:10px}
+  .toggleRow{gap:12px;padding:12px;align-items:flex-start}.toggleRow span{min-width:0}.toggleRow b{font-size:12px}.toggleRow small{font-size:10px;line-height:1.4}.toggleRow input{width:20px;height:20px;flex:0 0 20px;margin:1px 0 0 auto}
+  .settingsIntro{padding:12px}.settingsIntro b{font-size:12px}.settingsIntro span{font-size:10px}
+  .integrationForm{gap:12px}.integrationGroup{padding:13px;border-radius:11px;gap:10px}.integrationTitle{gap:8px;padding-bottom:8px}.integrationTitle>.icon{width:18px}.integrationTitle b{font-size:12px}.integrationTitle small{font-size:9.5px;line-height:1.35;overflow-wrap:anywhere}
+  .notificationDiagnostic{font-size:10px;overflow-wrap:anywhere}.notificationDiagnostic div{display:grid;gap:5px}
+  .applicationRow{grid-template-columns:minmax(0,1fr);gap:10px}.applicationRow select{width:100%}
+  .saveBar{position:sticky!important;bottom:0!important;z-index:30;margin:18px -14px 0!important;padding:11px 14px calc(11px + env(safe-area-inset-bottom))!important;display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:8px!important;background:rgba(255,255,255,.97)!important;backdrop-filter:blur(16px);border-top:1px solid #e6e9ed!important;box-shadow:0 -10px 28px #11182712!important}.syncState{display:flex!important;align-items:flex-start;gap:7px;min-width:0}.syncState .icon{width:14px;margin-top:1px}.syncState span{font-size:9.5px;line-height:1.35;color:#747b86}.saveBar .btn{width:100%;min-height:44px;font-size:12px}
+  .syncToast{top:max(10px,env(safe-area-inset-top));width:calc(100vw - 20px);padding:11px 12px;border-radius:13px}.syncToastCopy strong{font-size:12px}.syncToastCopy small{font-size:9.5px}
+}
+
+@media(max-width:390px){
+  .shell{padding-left:8px;padding-right:8px}.actions{gap:6px}.actions>.btn{font-size:10px;padding:8px 6px}.wordmark{width:172px}.content,.profileCard,.sidebar{padding:11px}.links{grid-template-columns:minmax(0,1fr)}.settingsTabs button{min-width:98px}.drawer,.settingsDrawer,.categoryDrawer,.applicationsDrawer{padding-left:12px;padding-right:12px}.drawerHead{margin-left:-12px;margin-right:-12px}.settingsTabs{margin-left:-12px;margin-right:-12px;padding-left:12px;padding-right:12px}.saveBar{margin-left:-12px!important;margin-right:-12px!important;padding-left:12px!important;padding-right:12px!important}
+}
