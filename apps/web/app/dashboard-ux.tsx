@@ -7,6 +7,7 @@ type Toast={kind:'ok'|'error';title:string;detail:string}|null;
 export default function DashboardUX(){
   const [toast,setToast]=useState<Toast>(null);
   const lastNotice=useRef('');
+  const detailedErrorAt=useRef(0);
   const closeTimer=useRef<number|undefined>(undefined);
   const hideTimer=useRef<number|undefined>(undefined);
 
@@ -15,6 +16,27 @@ export default function DashboardUX(){
       if(closeTimer.current)window.clearTimeout(closeTimer.current);
       if(hideTimer.current)window.clearTimeout(hideTimer.current);
     };
+    const showError=(detail:string)=>{
+      clearTimers();
+      detailedErrorAt.current=Date.now();
+      document.body.dataset.jobradarSync='error';
+      setToast({kind:'error',title:'Check this setting',detail});
+      hideTimer.current=window.setTimeout(()=>{
+        setToast(null);
+        delete document.body.dataset.jobradarSync;
+      },7000);
+    };
+
+    const originalFetch=window.fetch.bind(window);
+    window.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
+      const response=await originalFetch(input,init);
+      const url=typeof input==='string'?input:input instanceof URL?input.toString():input.url;
+      if(url.includes('/api/integrations')&&(init?.method||'GET').toUpperCase()==='PATCH'&&!response.ok){
+        response.clone().json().then((body:any)=>showError(String(body?.error||'Integration credentials could not be saved.'))).catch(()=>showError('Integration credentials could not be saved.'));
+      }
+      return response;
+    }) as typeof window.fetch;
+
     const inspect=()=>{
       const text=(document.querySelector('.flash')?.textContent||'').trim();
       if(!text||text===lastNotice.current)return;
@@ -34,21 +56,20 @@ export default function DashboardUX(){
         return;
       }
 
-      if(text.includes('could not be saved')||text.includes('failed')){
-        clearTimers();
-        document.body.dataset.jobradarSync='error';
-        setToast({kind:'error',title:'Not fully saved',detail:text});
-        hideTimer.current=window.setTimeout(()=>{
-          setToast(null);
-          delete document.body.dataset.jobradarSync;
-        },6000);
+      if((text.includes('could not be saved')||text.includes('failed'))&&Date.now()-detailedErrorAt.current>1500){
+        showError(text);
       }
     };
 
     inspect();
     const observer=new MutationObserver(inspect);
     observer.observe(document.body,{subtree:true,childList:true,characterData:true});
-    return()=>{observer.disconnect();clearTimers();delete document.body.dataset.jobradarSync};
+    return()=>{
+      window.fetch=originalFetch;
+      observer.disconnect();
+      clearTimers();
+      delete document.body.dataset.jobradarSync;
+    };
   },[]);
 
   if(!toast)return null;
