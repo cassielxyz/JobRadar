@@ -1,6 +1,8 @@
 import './globals.css';
 import './v09.css';
+import './mobile-v10.css';
 import type {Metadata,Viewport} from 'next';
+import DashboardUX from './dashboard-ux';
 
 export const metadata:Metadata={
   title:{default:'JobRadar Everywhere',template:'%s · JobRadar Everywhere'},
@@ -9,5 +11,5 @@ export const metadata:Metadata={
   manifest:'/manifest.webmanifest',
   icons:{icon:[{url:'/icon.svg',type:'image/svg+xml'}]},
 };
-export const viewport:Viewport={themeColor:'#15171a',colorScheme:'light'};
-export default function RootLayout({children}:{children:React.ReactNode}){return <html lang="en"><body>{children}</body></html>}
+export const viewport:Viewport={themeColor:'#15171a',colorScheme:'light',width:'device-width',initialScale:1,viewportFit:'cover'};
+export default function RootLayout({children}:{children:React.ReactNode}){return <html lang="en"><body>{children}<DashboardUX/></body></html>}
