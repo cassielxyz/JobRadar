@@ -10,3 +10,12 @@ jobs:
       - run: pip install -r collector/requirements.txt pytest
       - working-directory: collector
         run: pytest -q
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/web/package.json
+      - working-directory: apps/web
+        run: npm install --package-lock=false --no-audit --no-fund
+      - working-directory: apps/web
+        run: npm run build
