@@ -5,6 +5,7 @@ on:
     branches: [v10-stage]
     paths:
       - 'scripts/apply_v10.py'
+      - 'apps/web/lib/learning-resources.ts'
       - '.github/workflows/apply-v10-release.yml'
 
 permissions:
