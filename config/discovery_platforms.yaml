@@ -1,0 +1,89 @@
+# JobRadar Everywhere discovery catalog
+#
+# These are discovery targets, not automatically trusted Apply destinations.
+# JobRadar still verifies role relevance, fresher/experience rules, location, liveness,
+# and application links before a result can appear as a verified match.
+#
+# Direct scraping/login automation is intentionally avoided. Agent Reach / Exa uses
+# public web discovery and JobRadar resolves the final application destination.
+
+platforms:
+  # India-first / general job boards
+  - {name: LinkedIn Jobs, domain: linkedin.com, tags: [india, general, fresher, tech]}
+  - {name: Naukri, domain: naukri.com, tags: [india, general, fresher, tech]}
+  - {name: Indeed, domain: indeed.com, tags: [india, general, fresher]}
+  - {name: Foundit, domain: foundit.in, tags: [india, general, fresher, tech]}
+  - {name: Shine, domain: shine.com, tags: [india, general, fresher]}
+  - {name: TimesJobs, domain: timesjobs.com, tags: [india, general, fresher]}
+  - {name: Freshersworld, domain: freshersworld.com, tags: [india, fresher, internship]}
+  - {name: Internshala, domain: internshala.com, tags: [india, fresher, internship]}
+  - {name: Cutshort, domain: cutshort.io, tags: [india, startup, tech, fresher]}
+  - {name: Instahyre, domain: instahyre.com, tags: [india, startup, tech, fresher]}
+  - {name: Hirist, domain: hirist.tech, tags: [india, tech, fresher]}
+  - {name: IIMJobs, domain: iimjobs.com, tags: [india, general]}
+  - {name: Apna, domain: apna.co, tags: [india, general, fresher]}
+  - {name: WorkIndia, domain: workindia.in, tags: [india, general, fresher]}
+  - {name: JobHai, domain: jobhai.com, tags: [india, general, fresher]}
+  - {name: Unstop, domain: unstop.com, tags: [india, fresher, internship]}
+  - {name: Wellfound, domain: wellfound.com, tags: [india, startup, tech, remote]}
+  - {name: Hirect, domain: hirect.in, tags: [india, startup, fresher]}
+  - {name: HerKey, domain: herkey.com, tags: [india, general]}
+  - {name: Quikr Jobs, domain: quikr.com, tags: [india, general, fresher]}
+  - {name: Jooble, domain: jooble.org, tags: [india, general, aggregator]}
+  - {name: Adzuna India, domain: adzuna.in, tags: [india, general, aggregator]}
+  - {name: Careerjet India, domain: careerjet.co.in, tags: [india, general, aggregator]}
+  - {name: Jora, domain: jora.com, tags: [india, general, aggregator]}
+  - {name: Talent.com, domain: talent.com, tags: [india, general, aggregator]}
+  - {name: GrabJobs, domain: grabjobs.co, tags: [india, general, aggregator]}
+  - {name: SimplyHired, domain: simplyhired.com, tags: [general, aggregator]}
+  - {name: Jobsora, domain: jobsora.com, tags: [india, general, aggregator]}
+  - {name: National Career Service, domain: ncs.gov.in, tags: [india, government, fresher]}
+  - {name: Glassdoor, domain: glassdoor.co.in, tags: [india, general, tech]}
+
+  # Global / startup / remote boards
+  - {name: ZipRecruiter, domain: ziprecruiter.com, tags: [general, remote]}
+  - {name: Dice, domain: dice.com, tags: [tech, remote]}
+  - {name: Built In, domain: builtin.com, tags: [startup, tech, remote]}
+  - {name: YC Work at a Startup, domain: ycombinator.com, tags: [startup, tech, remote]}
+  - {name: Startup Jobs, domain: startup.jobs, tags: [startup, tech, remote]}
+  - {name: Remote OK, domain: remoteok.com, tags: [remote, tech]}
+  - {name: We Work Remotely, domain: weworkremotely.com, tags: [remote, tech]}
+  - {name: Remotive, domain: remotive.com, tags: [remote, tech]}
+  - {name: Himalayas, domain: himalayas.app, tags: [remote, tech]}
+  - {name: Jobspresso, domain: jobspresso.co, tags: [remote, tech]}
+  - {name: Working Nomads, domain: workingnomads.com, tags: [remote, tech]}
+  - {name: Remote.co, domain: remote.co, tags: [remote, general]}
+  - {name: NoDesk, domain: nodesk.co, tags: [remote, tech]}
+  - {name: Jobicy, domain: jobicy.com, tags: [remote, general]}
+  - {name: Dynamite Jobs, domain: dynamitejobs.com, tags: [remote, startup]}
+  - {name: Arc, domain: arc.dev, tags: [remote, tech]}
+  - {name: Turing, domain: turing.com, tags: [remote, tech]}
+  - {name: Contra, domain: contra.com, tags: [remote, freelance, tech]}
+  - {name: Upwork, domain: upwork.com, tags: [remote, freelance, tech]}
+  - {name: PeoplePerHour, domain: peopleperhour.com, tags: [remote, freelance]}
+  - {name: Freelancer, domain: freelancer.com, tags: [remote, freelance, tech]}
+
+  # Applicant-tracking systems / direct employer boards
+  - {name: Greenhouse, domain: boards.greenhouse.io, tags: [ats, startup, tech]}
+  - {name: Greenhouse Job Boards, domain: job-boards.greenhouse.io, tags: [ats, startup, tech]}
+  - {name: Lever, domain: jobs.lever.co, tags: [ats, startup, tech]}
+  - {name: Ashby, domain: jobs.ashbyhq.com, tags: [ats, startup, tech]}
+  - {name: SmartRecruiters, domain: jobs.smartrecruiters.com, tags: [ats, general, tech]}
+  - {name: Workday, domain: myworkdayjobs.com, tags: [ats, enterprise, tech]}
+  - {name: Workable, domain: apply.workable.com, tags: [ats, startup, tech]}
+  - {name: Recruitee, domain: recruitee.com, tags: [ats, startup, tech]}
+  - {name: Personio, domain: jobs.personio.de, tags: [ats, startup, tech]}
+  - {name: Teamtailor, domain: teamtailor.com, tags: [ats, startup, tech]}
+  - {name: BambooHR, domain: bamboohr.com, tags: [ats, general]}
+  - {name: Jobvite, domain: jobs.jobvite.com, tags: [ats, general, tech]}
+  - {name: Breezy HR, domain: breezy.hr, tags: [ats, startup]}
+  - {name: iCIMS, domain: icims.com, tags: [ats, enterprise, tech]}
+  - {name: Taleo, domain: taleo.net, tags: [ats, enterprise]}
+  - {name: SAP SuccessFactors, domain: successfactors.com, tags: [ats, enterprise]}
+  - {name: Oracle Recruiting, domain: oraclecloud.com, tags: [ats, enterprise, tech]}
+  - {name: Rippling ATS, domain: ats.rippling.com, tags: [ats, startup, tech]}
+  - {name: Comeet, domain: comeet.com, tags: [ats, startup, tech]}
+  - {name: JazzHR, domain: applytojob.com, tags: [ats, startup]}
+  - {name: Pinpoint, domain: pinpointhq.com, tags: [ats, startup, tech]}
+  - {name: Zoho Recruit Career Sites, domain: careers-page.com, tags: [ats, india, startup]}
+  - {name: JobScore, domain: jobs.jobscore.com, tags: [ats, startup, tech]}
