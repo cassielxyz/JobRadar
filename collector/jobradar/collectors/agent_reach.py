@@ -66,7 +66,6 @@ def _platform_for(url: str):
     for row in PLATFORMS:
         domain = str(row.get('domain') or '').lower().lstrip('.')
         if host == domain or host.endswith('.' + domain) or domain.endswith('.' + host):
-            # Prefer the most specific domain when multiple catalog entries match.
             if best is None or len(domain) > len(str(best.get('domain') or '')):
                 best = row
     return best
@@ -75,10 +74,9 @@ def _platform_for(url: str):
 class AgentReachCollector:
     """Parallel web discovery across 70+ job platforms through Agent Reach / Exa.
 
-    The platform catalog is intentionally broader than the trusted-link list. Results from
-    Naukri, LinkedIn, Indeed and other job boards are discovery leads only; the rest of the
-    JobRadar pipeline still enforces role/location/experience rules and verifies the final
-    application destination.
+    Naukri, LinkedIn, Indeed and other public boards are discovery leads only. The rest of
+    JobRadar still enforces role/location/experience rules and verifies the final application
+    destination before a job becomes a trusted match.
     """
 
     def enabled(self):
@@ -104,7 +102,6 @@ class AgentReachCollector:
             for i, tag in enumerate(reversed(preferred), 1):
                 if tag in tags:
                     score += i * 10
-            # India and ATS sources should generally be exhausted before global freelance boards.
             if 'india' in tags: score += 25
             if 'ats' in tags: score += 18
             if 'freelance' in tags: score -= 20
@@ -113,7 +110,9 @@ class AgentReachCollector:
         return sorted(PLATFORMS, key=rank)
 
     def _queries(self, category: Category):
-        loc = ' '.join(category.locations[:8]) or 'India remote'
+        loc_values = [' '.join(str(x).split()).strip() for x in category.locations[:8] if str(x).strip()]
+        loc = '(' + ' OR '.join(f'"{x}"' for x in loc_values) + ')' if loc_values else '(India OR remote)'
+
         roles = []
         for value in list(category.role_keywords) + list(category.hidden_keywords):
             role = ' '.join(str(value).split()).strip()
@@ -124,21 +123,19 @@ class AgentReachCollector:
         if not roles:
             return []
 
-        qualifier = ''
+        qualifier_terms = []
         if getattr(category, 'fresher_only', False):
-            qualifier += ' fresher OR "entry level" OR junior OR graduate OR trainee OR L1'
+            qualifier_terms += ['fresher','"entry level"','junior','graduate','trainee','L1']
         if category.type == 'internship':
-            qualifier += ' internship OR intern OR trainee stipend'
+            qualifier_terms += ['internship','intern','stipend']
         elif category.type == 'startup':
-            qualifier += ' startup OR scaleup'
+            qualifier_terms += ['startup','scaleup']
+        qualifier = '(' + ' OR '.join(qualifier_terms) + ')' if qualifier_terms else ''
 
         queries = []
-        # Broad company-career discovery catches roles that never reach the large boards.
         for role in roles[:4]:
             queries.append(f'"{role}" {loc} {qualifier} careers apply')
 
-        # Search the entire 70+ catalog in small domain batches. Smaller batches produce much
-        # better search relevance than one huge OR expression while remaining fast in parallel.
         platforms = self._platform_priority(category)
         role_expr = ' OR '.join(f'"{r}"' for r in roles[:3])
         for i in range(0, len(platforms), 5):
@@ -146,8 +143,6 @@ class AgentReachCollector:
             domains = ' OR '.join(f'site:{p["domain"]}' for p in batch)
             queries.append(f'({role_expr}) {loc} {qualifier} ({domains})')
 
-        # Direct ATS/company searches are especially valuable because the application URL can
-        # often be verified without depending on a third-party board.
         queries.extend([
             f'({role_expr}) {loc} (site:boards.greenhouse.io OR site:job-boards.greenhouse.io OR site:jobs.lever.co OR site:jobs.ashbyhq.com)',
             f'({role_expr}) {loc} (site:jobs.smartrecruiters.com OR site:myworkdayjobs.com OR site:apply.workable.com OR site:recruitee.com)',
