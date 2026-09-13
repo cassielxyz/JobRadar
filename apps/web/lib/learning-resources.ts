@@ -21,7 +21,7 @@ const R:{test:(s:string)=>boolean;resources:LearningResource[]}[]=[
 
 export function resourcesForSkill(skill:string){
   const s=skill.toLowerCase();
-  const found:R[number]['resources']=[];
+  const found:LearningResource[]=[];
   for(const row of R)if(row.test(s))for(const item of row.resources)if(!found.some(x=>x.url===item.url))found.push(item);
   if(found.length)return found.slice(0,3);
   return [{title:'freeCodeCamp learning library',url:'https://www.freecodecamp.org/news/',provider:'freeCodeCamp',free:true}];
