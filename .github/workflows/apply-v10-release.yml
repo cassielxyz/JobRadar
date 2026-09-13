@@ -38,6 +38,9 @@ jobs:
       - name: Commit validated v1.0 to main
         run: |
           rm -f scripts/apply_v10.py .github/workflows/apply-v10-release.yml
+          # GitHub's workflow token cannot modify workflow files. Keep research.yml unchanged
+          # in this push; the connected GitHub app updates it separately after validation.
+          git checkout origin/main -- .github/workflows/research.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
