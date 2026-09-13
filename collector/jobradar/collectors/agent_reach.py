@@ -20,6 +20,13 @@ PLATFORM_FILE = ROOT / 'config' / 'discovery_platforms.yaml'
 
 # Public job boards/aggregators are useful discovery evidence, but they are not treated as
 # trusted final Apply destinations. JobRadar still resolves/verifies the employer/ATS URL.
+GOVERNMENT_DOMAINS = (
+    'tnpsc.gov.in','tamilnaducareerservices.tn.gov.in','keralapsc.gov.in','cmd.kerala.gov.in',
+    'careers-itmission.kerala.gov.in','itmission.kerala.gov.in','tanfinet.tn.gov.in','drdo.gov.in',
+    'isro.gov.in','bel-india.in','cdac.in','careers.cdac.in','nielit.gov.in','recruit-delhi.nielit.gov.in',
+    'rrbchennai.gov.in','bsnl.co.in','ecil.co.in',
+)
+
 DISCOVERY_ONLY_HINTS = (
     'linkedin.com','naukri.com','indeed.com','foundit.in','shine.com','timesjobs.com',
     'freshersworld.com','internshala.com','cutshort.io','instahyre.com','hirist.tech',
@@ -132,12 +139,20 @@ class AgentReachCollector:
             qualifier_terms += ['startup','scaleup']
         qualifier = '(' + ' OR '.join(qualifier_terms) + ')' if qualifier_terms else ''
 
+        role_expr = ' OR '.join(f'"{r}"' for r in roles[:3])
         queries = []
+        if category.type == 'government':
+            # Many official portals rate-limit or block GitHub runner IPs. Exa can still discover
+            # their indexed official vacancies; JobRadar verifies the returned official domain.
+            for i in range(0, len(GOVERNMENT_DOMAINS), 5):
+                domains = ' OR '.join(f'site:{d}' for d in GOVERNMENT_DOMAINS[i:i+5])
+                queries.append(f'({role_expr}) {loc} {qualifier} ({domains}) recruitment careers apply')
+            return [' '.join(q.split()) for q in queries][:12]
+
         for role in roles[:4]:
             queries.append(f'"{role}" {loc} {qualifier} careers apply')
 
         platforms = self._platform_priority(category)
-        role_expr = ' OR '.join(f'"{r}"' for r in roles[:3])
         for i in range(0, len(platforms), 5):
             batch = platforms[i:i+5]
             domains = ' OR '.join(f'site:{p["domain"]}' for p in batch)
@@ -205,6 +220,7 @@ class AgentReachCollector:
                     seen.add(url)
                     platform = _platform_for(url)
                     host = _host(url)
+                    official_domain = next((d for d in GOVERNMENT_DOMAINS if host == d or host.endswith('.'+d)), '')
                     platform_name = str((platform or {}).get('name') or host or 'Web discovery')
                     discovery_only = any(host == d or host.endswith('.'+d) for d in DISCOVERY_ONLY_HINTS)
                     company = 'External job-platform discovery' if discovery_only else 'Web discovery'
@@ -219,7 +235,8 @@ class AgentReachCollector:
                             'discovery_only':discovery_only,
                             'query':query,
                             'result':raw,
-                            'source_kind':'community',
+                            'source_kind':'government' if official_domain else 'community',
+                            'official_domains':[official_domain] if official_domain else [],
                         },
                     )
                     relevant, _ = semantic_gate(job, category)

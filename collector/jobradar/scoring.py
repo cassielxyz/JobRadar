@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from .models import Category, Job
 from .extract import has_explicit_fresher_evidence
+from .trust import assess_job_trust
 
 LOCATION_ALIASES = {
     "bangalore":"bengaluru", "bengaluru":"bengaluru", "tn":"tamil nadu",
@@ -61,15 +62,17 @@ def source_allowed(category: Category, source_kind: str) -> bool:
 
 
 def semantic_gate(job: Job, category: Category):
-    """Hard relevance gate before score bonuses.
+    """Hard category relevance gate before ranking.
 
-    The old project treated words like 'scientist' as enough to match and even considered an
-    empty location a match. This gate requires actual networking/cyber/cloud evidence, or for
-    government hidden titles, explicit CSE/IT eligibility. Unrelated disciplines are rejected.
+    Each category keeps its own role family. A networking/cyber resume therefore cannot make a
+    SOC vacancy relevant to a Software Developer category. Government hidden titles remain a
+    special case and need explicit CSE/IT or networking/security/cloud evidence.
     """
     title = norm(job.title)
     body = norm(job.description)
     text = f"{title} {body}"
+    category_text = norm(' '.join([*(category.role_keywords or []), *(category.hidden_keywords or [])]))
+    category_is_network_family = bool(CORE_TECH.search(category_text))
 
     if UNRELATED_DISCIPLINE_TITLE.search(title) and not CORE_TECH.search(title):
         return False, ["unrelated engineering discipline"]
@@ -81,32 +84,24 @@ def semantic_gate(job: Job, category: Category):
     cse = bool(CSE_EVIDENCE.search(text))
 
     if category.type == 'government':
-        # Direct network/security/cloud title or duties are ideal. Generic government technical
-        # titles are permitted only when CSE/IT is explicitly part of the notification.
-        relevant = bool(role_hits_title or core or (hidden_hits and cse))
+        relevant = bool(role_hits_title or role_hits_body or (category_is_network_family and core) or (hidden_hits and cse))
         if not relevant:
-            return False, ["no networking/cyber/cloud or CSE/IT evidence"]
-    elif category.type == 'internship':
-        relevant = bool((role_hits_title or role_hits_body or hidden_hits) and core)
-        # A title such as 'Cybersecurity Intern' itself is core evidence.
-        if CORE_TECH.search(title) and INTERNSHIP_TITLE.search(title):
-            relevant = True
-        if not relevant:
-            return False, ["internship is not clearly networking/cyber/cloud related"]
+            return False, ["no category-specific networking/cyber/cloud or CSE/IT evidence"]
     else:
-        relevant = bool(role_hits_title or core)
-        # Broad support/systems hidden titles need concrete network/security/cloud duties.
-        if not relevant and hidden_hits and core:
+        # Direct role/hidden-title evidence works for any category, including software/custom.
+        relevant = bool(role_hits_title or role_hits_body or hidden_hits)
+        # Only networking/cyber/cloud categories may use generic CORE_TECH as a fallback.
+        if not relevant and category_is_network_family and core:
             relevant = True
         if not relevant:
-            return False, ["role is not clearly networking/cyber/cloud related"]
+            return False, ["job does not match this category's role family"]
+        if category.type == 'internship' and not INTERNSHIP_TITLE.search(text):
+            # An internship category must still have internship/trainee evidence.
+            return False, ["listing is not clearly an internship/trainee role"]
 
     if getattr(category, 'fresher_only', False) and SENIOR_TITLE.search(title):
         return False, ["fresher-only category: senior-level title"]
-
     return True, []
-
-
 
 def fresher_gate(job: Job, category: Category):
     """Apply strict experience rejection only when the category explicitly opts in.
@@ -155,6 +150,10 @@ def score_job(job: Job, category: Category):
     if not fresh_ok:
         return 0, fresh_reasons, False
 
+    trust = assess_job_trust(job, category)
+    if trust.get('blocked'):
+        return 0, ["trust/scam gate: " + str((trust.get('reasons') or ['blocked'])[-1])], False
+
     text = " ".join([job.title, job.description, job.company])
     title_hits = contains_any(job.title, category.role_keywords)
     body_hits = contains_any(text, category.role_keywords)
@@ -164,6 +163,11 @@ def score_job(job: Job, category: Category):
 
     score = 0
     reasons = []
+    trust_score = int(trust.get('score') or 0)
+    if trust_score >= 90:
+        score += 8; reasons.append("high-trust source")
+    elif trust_score >= 70:
+        score += 4; reasons.append("recognized source")
     if title_hits:
         score += 32
         reasons.append("target role title")
@@ -244,5 +248,5 @@ def score_job(job: Job, category: Category):
         return max(0, min(100, score)), reasons + ["official verification required"], False
 
     # Dashboard display uses a conservative floor. Alerts use the higher per-category threshold.
-    eligible = score >= 55
+    eligible = score >= 40
     return max(0, min(100, score)), reasons, eligible

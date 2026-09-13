@@ -28,7 +28,7 @@ from .resume_match import load_candidate, apply_candidate_to_categories, persona
 from .integration_config import apply_dashboard_integrations
 
 ROOT = Path(__file__).resolve().parents[2]
-DISPLAY_MIN_SCORE = int(os.getenv('DASHBOARD_MIN_SCORE', '55') or 55)
+DISPLAY_MIN_SCORE = int(os.getenv('DASHBOARD_MIN_SCORE', '40') or 40)
 
 
 def fp(job):
@@ -128,7 +128,11 @@ def _process_job(db, job, source, target_categories, run_errors, notification_se
     if not target_categories:
         return
 
-    v = verify_url(job.canonical_url, source.get('official_domains') or [])
+    official_domains = list(source.get('official_domains') or [])
+    for domain in ((job.raw or {}).get('official_domains') or []):
+        if domain and domain not in official_domains:
+            official_domains.append(domain)
+    v = verify_url(job.canonical_url, official_domains)
     if not v.get('active'):
         return
     stats['verified'] += 1
@@ -136,7 +140,7 @@ def _process_job(db, job, source, target_categories, run_errors, notification_se
     job.official_verified = v['official']
 
     links = resolve_job_links(
-        job.canonical_url, job.source_url, source.get('official_domains') or [],
+        job.canonical_url, job.source_url, official_domains,
         trusted_listing=(source.get('id') == 'freehire'),
     )
     job.apply_url = links.get('apply_url')

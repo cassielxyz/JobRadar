@@ -13,7 +13,8 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "mammoth": "^1.10.0",
-    "pdf-parse": "^1.1.1"
+    "pdf-parse": "^1.1.1",
+    "docx": "^9.7.1"
   },
   "devDependencies": {
     "@types/node": "^22.18.0",

@@ -48,9 +48,12 @@ def apply_candidate_to_categories(categories, candidate):
     resume_skills=[x for x in [*(r.get('skills') or []),*inferred] if norm(x) in discovery_skill_allow]
     for c in categories:
         if locs:c.locations=list(dict.fromkeys(locs))
-        # Global role preferences personalize discovery but preserve each category's specialist seeds.
-        c.role_keywords=list(dict.fromkeys([*roles,*resume_roles,*c.role_keywords]))[:40]
-        c.hidden_keywords=list(dict.fromkeys([*c.hidden_keywords,*resume_skills]))[:40]
+        # Category isolation: a SOC/network profile must not turn a Software Developer or other
+        # custom category into a SOC category. Profile roles are only a fallback for categories
+        # that intentionally have no role definition. Resume details still affect personalized_score.
+        if not c.role_keywords:
+            c.role_keywords=list(dict.fromkeys([*roles,*resume_roles]))[:40]
+        c.hidden_keywords=list(dict.fromkeys(c.hidden_keywords))[:40]
         c.exclude_keywords=list(dict.fromkeys([*excluded,*c.exclude_keywords]))[:30]
         if p.get('max_experience_years') is not None:
             c.max_experience_years=float(p['max_experience_years'])
