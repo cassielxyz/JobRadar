@@ -4,6 +4,16 @@ import {getAuthorizedUser} from '@/lib/auth';
 
 const PER_CATEGORY_TARGET=10;
 
+function decorate(row:any){
+  if(!row?.job)return row;
+  const platform=String(row.job?.raw?.source_platform||'').trim();
+  if(platform){
+    row.job.discovery_source_id=row.job.source_id;
+    row.job.source_id=platform;
+  }
+  return row;
+}
+
 export async function GET(req:Request){
   const auth=await getAuthorizedUser();
   if(auth.status!==200)return NextResponse.json({error:'Unauthorized'},{status:auth.status});
@@ -20,7 +30,9 @@ export async function GET(req:Request){
   const {data,error}=await q;
   if(error)return NextResponse.json({error:error.message},{status:500});
 
-  const live=(data||[]).filter((m:any)=>m.job?.active!==false&&m.job?.application_status!=='closed');
+  const live=(data||[])
+    .filter((m:any)=>m.job?.active!==false&&m.job?.application_status!=='closed')
+    .map(decorate);
   if(cat)return NextResponse.json(live);
 
   // The home dashboard should represent every category rather than letting one high-volume
