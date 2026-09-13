@@ -60,7 +60,7 @@ jobs:
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
           AI_MODE: ${{ vars.AI_MODE }}
           AI_REVIEW_MIN_SCORE: ${{ vars.AI_REVIEW_MIN_SCORE }}
-          DASHBOARD_MIN_SCORE: ${{ vars.DASHBOARD_MIN_SCORE }}
+          DASHBOARD_MIN_SCORE: ${{ vars.DASHBOARD_MIN_SCORE || '40' }}
           GITHUB_TOKEN: ${{ github.token }}
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -76,3 +76,12 @@ jobs:
           AGENT_REACH_ENABLED: ${{ vars.AGENT_REACH_ENABLED }}
           AGENT_REACH_WORKERS: '6'
         run: python -m jobradar.main --trigger github-actions
+
+      - name: Send real-job ntfy digest
+        working-directory: collector
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NTFY_SERVER: ${{ vars.NTFY_SERVER }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: python -m jobradar.digest --limit 10
