@@ -9,13 +9,13 @@ permissions:
   copilot-requests: write
 
 concurrency:
-  group: jobradar-research-v08
+  group: jobradar-research-v10
   cancel-in-progress: false
 
 jobs:
   research:
     runs-on: ubuntu-latest
-    timeout-minutes: 28
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -74,4 +74,5 @@ jobs:
           ALERT_EMAIL_FROM: ${{ vars.ALERT_EMAIL_FROM }}
           ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
           AGENT_REACH_ENABLED: ${{ vars.AGENT_REACH_ENABLED }}
+          AGENT_REACH_WORKERS: '6'
         run: python -m jobradar.main --trigger github-actions
