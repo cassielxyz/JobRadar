@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 ENV_MAP = {
@@ -14,9 +15,13 @@ ENV_MAP = {
     'gemini_api_key':'GEMINI_API_KEY','gemini_model':'GEMINI_MODEL',
 }
 
+TOKEN_FIELDS = {'ntfy_topic', 'telegram_bot_token', 'telegram_chat_id', 'gemini_api_key'}
+
+
 def _b64(s: str) -> bytes:
     pad='='*((4-len(s)%4)%4)
     return base64.urlsafe_b64decode((s+pad).encode())
+
 
 def decrypt_payload(envelope: str) -> dict:
     parts=(envelope or '').split('.')
@@ -31,6 +36,7 @@ def decrypt_payload(envelope: str) -> dict:
     obj=json.loads(raw.decode('utf-8'))
     return obj if isinstance(obj,dict) else {}
 
+
 def resolve_user_id(db, user_id=None):
     if user_id:return user_id
     try:
@@ -43,6 +49,14 @@ def resolve_user_id(db, user_id=None):
     except Exception:pass
     return None
 
+
+def _clean_value(key: str, value) -> str:
+    text = str(value or '').strip()
+    if key in TOKEN_FIELDS:
+        text = re.sub(r'\s+', '', text)
+    return text
+
+
 def apply_dashboard_integrations(db, user_id=None):
     uid=resolve_user_id(db,user_id)
     if not uid:return {'loaded':False,'user_id':None,'keys':[]}
@@ -53,7 +67,7 @@ def apply_dashboard_integrations(db, user_id=None):
         payload={}
     loaded=[]
     for key,env in ENV_MAP.items():
-        value=str(payload.get(key) or '').strip()
+        value=_clean_value(key, payload.get(key))
         if value:
             os.environ[env]=value
             loaded.append(key)
