@@ -60,8 +60,16 @@ def _extract_json(text: str):
             return None
 
 
+def _safe_error(exc: Exception, secret: str = '') -> str:
+    text = str(exc)
+    if secret:
+        text = text.replace(secret, '[redacted]')
+    text = re.sub(r'([?&]key=)[^&\s\'\"]+', r'\1[redacted]', text, flags=re.I)
+    return text[:240]
+
+
 def _gemini(text: str):
-    key = os.getenv('GEMINI_API_KEY', '').strip()
+    key = re.sub(r'\s+', '', os.getenv('GEMINI_API_KEY', ''))
     if not key:
         return None, 'Gemini not configured'
     model = os.getenv('GEMINI_MODEL', 'gemini-3.1-flash-lite').strip() or 'gemini-3.1-flash-lite'
@@ -80,7 +88,7 @@ def _gemini(text: str):
         raw = ''.join(p.get('text', '') for p in data.get('candidates', [{}])[0].get('content', {}).get('parts', []))
         return _extract_json(raw), None
     except Exception as e:
-        return None, str(e)[:240]
+        return None, _safe_error(e, key)
 
 
 def _copilot(text: str):
@@ -142,7 +150,6 @@ def _merge(base: dict, providers: list[tuple[str, dict]]):
                 if isinstance(value, bool):
                     out[field] = value
             elif isinstance(value, str) and value.strip():
-                # AI is used to fill/correct weak deterministic fields. Contact values still come from resume text.
                 if not str(out.get(field) or '').strip() or field in {'full_name','professional_summary','location'}:
                     out[field] = re.sub(r'\s+', ' ', value).strip()
     out['ai_enriched'] = bool(used)
