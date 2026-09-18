@@ -5,9 +5,8 @@ from collections import defaultdict
 
 from .db import SupabaseREST
 from .integration_config import apply_dashboard_integrations
-from .notifications import get_settings
+from .notifications import deliver, get_settings
 from .resume_match import load_candidate
-from .alerts.ntfy import send_result
 
 
 def _destination(job):
@@ -26,8 +25,9 @@ def run(limit_per_category=10):
     user_id = ((candidate or {}).get('preferences') or {}).get('user_id')
     apply_dashboard_integrations(db, user_id)
     settings = get_settings(db)
-    if not settings.get('ntfy_enabled'):
-        result = {'digest': 'skipped', 'reason': 'ntfy disabled'}
+
+    if not any(settings.get(k, True) for k in ('ntfy_enabled', 'telegram_enabled', 'email_enabled')):
+        result = {'digest': 'skipped', 'reason': 'all notification channels disabled'}
         print(result)
         return result
 
@@ -53,7 +53,7 @@ def run(limit_per_category=10):
         if not top:
             continue
 
-        lines = [f"Top {len(top)} verified matches — {category}"]
+        lines = [f"Top {len(top)} verified matches - {category}"]
         first_url = ''
         for i, row in enumerate(top, 1):
             job = row.get('job') or {}
@@ -62,17 +62,19 @@ def run(limit_per_category=10):
                 first_url = url
             where = job.get('location') or 'location not disclosed'
             lines.append(
-                f"{i}. {job.get('title', 'Job')} — {job.get('company', '')} — {where} — {row.get('score', 0)}%"
+                f"{i}. {job.get('title', 'Job')} - {job.get('company', '')} - {where} - {row.get('score', 0)}%"
             )
             if url:
                 lines.append(url)
 
-        result = send_result(
-            '\n'.join(lines),
-            url=first_url or None,
-            title=f'JobRadar Everywhere · {category}',
-        )
-        sent.append({'category': category, 'count': len(top), **result})
+        subject = f'JobRadar Everywhere - {category}'
+        results = deliver(subject, '\n'.join(lines), first_url or None, settings)
+        sent.append({
+            'category': category,
+            'count': len(top),
+            'channels': results,
+            'delivered': any(r.get('ok') for r in results),
+        })
 
     summary = {'digest': 'complete', 'categories': sent}
     print(summary)
