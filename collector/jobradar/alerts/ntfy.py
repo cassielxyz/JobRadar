@@ -2,6 +2,12 @@ import os
 import httpx
 
 
+def _safe_header(value):
+    text = str(value or '').replace('\r', ' ').replace('\n', ' ').strip()
+    # httpx requires header values to be ASCII. Preserve body UTF-8, but sanitize headers.
+    return text.encode('ascii', 'ignore').decode('ascii') or 'JobRadar Everywhere'
+
+
 def send_result(text, url=None, title=None):
     topic = os.getenv('NTFY_TOPIC')
     server = os.getenv('NTFY_SERVER', 'https://ntfy.sh').rstrip('/')
@@ -9,7 +15,7 @@ def send_result(text, url=None, title=None):
         return {'channel': 'ntfy', 'configured': False, 'ok': False, 'error': 'not configured'}
 
     headers = {
-        'Title': (title or 'JobRadar Everywhere')[:200],
+        'Title': _safe_header(title or 'JobRadar Everywhere')[:200],
         'Priority': 'high',
     }
     if url:
