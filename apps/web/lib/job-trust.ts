@@ -9,8 +9,9 @@ const host=(u:string)=>{try{return new URL(u||'').hostname.toLowerCase().replace
 const matches=(h:string,ds:string[])=>ds.some(d=>h===d||h.endsWith('.'+d));
 const nonJobPath=/(?:^|\/)(?:legal(?:\/|$)|help(?:\/|$)|privacy(?:\/|$)|accessibility(?:\/|$)|cookie(?:s|\/|$)|terms(?:\/|$)|user-agreement(?:\/|$)|authwall(?:\/|$)|checkpoint(?:\/|$)|signup(?:\/|$)|feed(?:\/|$))/i;
 function badJobUrl(u:string){
+  if(!String(u||'').trim())return false;
   try{
-    const x=new URL(u||'');const h=x.hostname.toLowerCase().replace(/^www\./,'');const p=x.pathname||'/';const q=x.search.toLowerCase();
+    const x=new URL(u);const h=x.hostname.toLowerCase().replace(/^www\./,'');const p=x.pathname||'/';const q=x.search.toLowerCase();
     if(nonJobPath.test(p)||/(user-agreement|privacy-policy|terms-of-service|auth-button_user-agreement)/i.test(q))return true;
     if(h==='linkedin.com'||h.endsWith('.linkedin.com'))return !/^\/jobs\/view\/[^/]+/i.test(p);
     return false;
