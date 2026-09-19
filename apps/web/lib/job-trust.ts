@@ -7,14 +7,31 @@ const tooGood=/\b(no interview|guaranteed job|guaranteed selection|instant joini
 const personal=/\b[A-Z0-9._%+-]+@(gmail|yahoo|outlook|hotmail|protonmail)\.[A-Z]{2,}\b/i;
 const host=(u:string)=>{try{return new URL(u||'').hostname.toLowerCase().replace(/^www\./,'')}catch{return ''}};
 const matches=(h:string,ds:string[])=>ds.some(d=>h===d||h.endsWith('.'+d));
+const nonJobPath=/(?:^|\/)(?:legal(?:\/|$)|help(?:\/|$)|privacy(?:\/|$)|accessibility(?:\/|$)|cookie(?:s|\/|$)|terms(?:\/|$)|user-agreement(?:\/|$)|authwall(?:\/|$)|checkpoint(?:\/|$)|signup(?:\/|$)|feed(?:\/|$))/i;
+function badJobUrl(u:string){
+  try{
+    const x=new URL(u||'');const h=x.hostname.toLowerCase().replace(/^www\./,'');const p=x.pathname||'/';const q=x.search.toLowerCase();
+    if(nonJobPath.test(p)||/(user-agreement|privacy-policy|terms-of-service|auth-button_user-agreement)/i.test(q))return true;
+    if(h==='linkedin.com'||h.endsWith('.linkedin.com'))return !/^\/jobs\/view\/[^/]+/i.test(p);
+    return false;
+  }catch{return true}
+}
 
 export function assessJobTrust(job:any,categoryType=''){
-  const h=host(job?.apply_url||job?.canonical_url||job?.source_url||'');
+  const primary=job?.apply_url||job?.canonical_url||job?.source_url||'';
+  const h=host(primary);
   const sh=host(job?.source_url||'');
   const text=`${job?.title||''} ${job?.company||''} ${job?.description||''}`;
   const reasons:string[]=[];
   const official=!!job?.official_verified||h.endsWith('.gov.in')||h.endsWith('.nic.in')||h.endsWith('.ac.in');
   const ats=matches(h,ATS),board=matches(h,BOARDS)||matches(sh,BOARDS);
+
+  // Discovery listings with no verified apply destination must point to a concrete job page.
+  // This immediately removes stale rows such as LinkedIn legal/user-agreement pages from the UI.
+  if(!job?.apply_verified&&(badJobUrl(job?.canonical_url||'')||badJobUrl(job?.source_url||''))){
+    return {score:0,blocked:true,reasons:['source URL is not a concrete job listing']};
+  }
+
   let score=official?97:ats?92:job?.apply_verified?86:board?76:58;
   reasons.push(official?'official/public-sector domain':ats?'recognized employer ATS':job?.apply_verified?'verified application destination':board?'recognized job platform':'unrecognized employer/source domain');
   if(matches(h,SHORT)||matches(sh,SHORT)){score-=30;reasons.push('shortened destination URL')}
