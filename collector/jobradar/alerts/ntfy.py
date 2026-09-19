@@ -4,6 +4,8 @@ from urllib.parse import urlparse
 
 import httpx
 
+from ..linkresolver import is_non_job_url
+
 
 def _clean(value):
     return str(value or '').replace('\r', ' ').replace('\n', ' ').strip()
@@ -11,7 +13,7 @@ def _clean(value):
 
 def _http_url(value):
     url = str(value or '').strip()
-    if not url.startswith(('http://', 'https://')):
+    if not url.startswith(('http://', 'https://')) or is_non_job_url(url):
         return None
     try:
         parsed = urlparse(url)
@@ -43,12 +45,7 @@ def _category_accent(category):
 
 
 def _parse_jobradar_alert(text):
-    """Turn the collector's plain-text alert into a compact ntfy card.
-
-    URLs are intentionally removed from the message body and exposed only as native
-    action buttons, so Android's ntfy feed stays readable instead of becoming a wall
-    of raw links.
-    """
+    """Turn JobRadar's plain-text alert into a compact ntfy card."""
     raw_lines = [line.strip() for line in str(text or '').splitlines() if line.strip()]
     if len(raw_lines) < 3 or not raw_lines[0].lower().startswith('jobradar everywhere'):
         return None
@@ -60,13 +57,18 @@ def _parse_jobradar_alert(text):
     fields = {}
     open_url = None
     notice_url = None
+    source_url = None
 
     for line in raw_lines[3:]:
-        if line.lower().startswith('open:'):
+        low = line.lower()
+        if low.startswith('open:'):
             open_url = _http_url(line.split(':', 1)[1].strip())
             continue
-        if line.lower().startswith('official notification:'):
+        if low.startswith('official notification:'):
             notice_url = _http_url(line.split(':', 1)[1].strip())
+            continue
+        if low.startswith('source url:'):
+            source_url = _http_url(line.split(':', 1)[1].strip())
             continue
         if ':' in line:
             key, value = line.split(':', 1)
@@ -87,9 +89,15 @@ def _parse_jobradar_alert(text):
         body.append(f'🧭 **Track:** {_md(category)}')
     if score is not None:
         body.append(f'🎯 **Match:** **{score}%**')
+    if fields.get('source'):
+        body.append(f"🌐 **Source:** {_md(fields['source'])}")
     if fields.get('deadline'):
         body.append(f"⏳ **Deadline:** {_md(fields['deadline'])}")
     body.append('✅ **Application link verified**')
+
+    summary = fields.get('summary')
+    if summary:
+        body.extend(['', '**Role summary**', _md(summary)])
 
     reasons = [x.strip() for x in (fields.get('why') or '').split(';') if x.strip()]
     if reasons:
@@ -104,13 +112,15 @@ def _parse_jobradar_alert(text):
     if primary:
         actions.append({
             'action': 'view',
-            'label': '🟢 Open job' if open_url else '📄 Open notice',
+            'label': '🟢 Apply / Open' if open_url else '📄 Open notice',
             'url': primary,
             'clear': False,
         })
-    if notice_url and notice_url != primary:
+    if source_url and source_url != primary:
+        actions.append({'action': 'view', 'label': '🌐 View source', 'url': source_url, 'clear': False})
+    if notice_url and notice_url not in {primary, source_url}:
         actions.append({'action': 'view', 'label': '📄 Official notice', 'url': notice_url, 'clear': False})
-    if job_title:
+    if job_title and len(actions) < 3:
         actions.append({'action': 'copy', 'label': '📋 Copy title', 'value': job_title, 'clear': False})
 
     return {
@@ -183,8 +193,6 @@ def send_result(text, url=None, title=None, *, actions=None, tags=None, markdown
         payload['actions'] = action_rows
 
     try:
-        # JSON publishing avoids fragile non-ASCII HTTP header handling and lets ntfy render
-        # Markdown plus up to three native action buttons in Android/web clients.
         r = httpx.post(server, json=payload, timeout=20)
         return {
             'channel': 'ntfy',
