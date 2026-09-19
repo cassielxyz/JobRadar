@@ -23,9 +23,25 @@ def test_linkedin_legal_page_is_rejected():
     assert is_non_job_url('https://www.linkedin.com/legal/user-agreement?trk=linkedin-tc_auth-button_user-agreement')
 
 
+def test_linkedin_post_is_rejected():
+    assert is_non_job_url('https://www.linkedin.com/posts/some-user_network-engineer-fresher-activity-123456')
+
+
 def test_linkedin_job_detail_is_allowed():
     assert not is_non_job_url('https://www.linkedin.com/jobs/view/1234567890?trk=public_jobs_topcard-title')
 
 
 def test_linkedin_search_page_is_not_a_job_card_source():
     assert is_non_job_url('https://www.linkedin.com/jobs/search/?keywords=network%20engineer')
+
+
+def test_internshala_registration_is_rejected():
+    assert is_non_job_url('https://internshala.com/registration/student')
+
+
+def test_internshala_job_detail_is_allowed():
+    assert not is_non_job_url('https://internshala.com/job/detail/fresher-network-engineering-role-job-in-bangalore-at-example123')
+
+
+def test_shine_login_is_rejected():
+    assert is_non_job_url('https://www.shine.com/pages/myshine/login')
