@@ -20,10 +20,27 @@ def get_settings(db):
         return dict(DEFAULTS)
 
 
-def deliver(subject: str, text: str, url: str | None, settings: dict):
+def deliver(
+    subject: str,
+    text: str,
+    url: str | None,
+    settings: dict,
+    *,
+    ntfy_text: str | None = None,
+    ntfy_actions: list[dict] | None = None,
+    ntfy_tags: list[str] | None = None,
+    ntfy_markdown: bool = False,
+):
     results = []
     if settings.get('ntfy_enabled', True):
-        results.append(ntfy_send(text, url))
+        results.append(ntfy_send(
+            ntfy_text if ntfy_text is not None else text,
+            url,
+            title=subject,
+            actions=ntfy_actions,
+            tags=ntfy_tags,
+            markdown=ntfy_markdown,
+        ))
     if settings.get('telegram_enabled', True):
         results.append(telegram_send(text))
     if settings.get('email_enabled', True):
