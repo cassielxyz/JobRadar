@@ -14,6 +14,7 @@ import yaml
 from ..models import Job, Category
 from ..scoring import semantic_gate
 from ..linkresolver import is_non_job_url
+from ..category_research import category_search_terms
 
 URL_RE = re.compile(r'https?://[^\s\]\)\}"\']+')
 ROOT = Path(__file__).resolve().parents[3]
@@ -44,12 +45,9 @@ def _host(url: str) -> str:
 
 
 def _clean_title(value: str, fallback: str = '') -> str:
-    """Turn noisy search-result titles into a compact human job title."""
     text = str(value or '').replace('\n', ' ').strip()
-    # Markdown link -> visible label, then remove any remaining raw URLs.
     text = re.sub(r'\[([^\]]{2,160})\]\(https?://[^)]+\)', r'\1', text)
     text = URL_RE.sub('', text)
-    # Common Exa/social metadata prefixes.
     text = re.sub(r'^\s*(?:URL\s*:|[-–—]+)\s*', '', text, flags=re.I)
     text = re.sub(r'^\s*\[[^\]]*(?:20\d{2}|liked?|reposted?)[^\]]*\]\s*', '', text, flags=re.I)
     text = re.sub(r'\s*[·|]\s*(?:LinkedIn|Indeed|Naukri|Internshala|Shine)\s*$', '', text, flags=re.I)
@@ -96,11 +94,7 @@ def _platform_for(url: str):
 
 
 class AgentReachCollector:
-    """Parallel discovery across public boards and employer ATS pages.
-
-    Public boards are discovery leads only. Legal/login/search/social-post URLs are discarded;
-    JobRadar still verifies role, location, experience and the final usable destination.
-    """
+    """Parallel category-aware discovery across public boards and employer ATS pages."""
 
     def enabled(self):
         return os.getenv('AGENT_REACH_ENABLED','false').lower() == 'true'
@@ -136,13 +130,7 @@ class AgentReachCollector:
         loc_values = [' '.join(str(x).split()).strip() for x in category.locations[:8] if str(x).strip()]
         loc = '(' + ' OR '.join(f'"{x}"' for x in loc_values) + ')' if loc_values else '(India OR remote)'
 
-        roles = []
-        for value in list(category.role_keywords) + list(category.hidden_keywords):
-            role = ' '.join(str(value).split()).strip()
-            if len(role) >= 4 and role.casefold() not in {r.casefold() for r in roles}:
-                roles.append(role)
-            if len(roles) >= 6:
-                break
+        roles = category_search_terms(category, limit=12)
         if not roles:
             return []
 
@@ -155,7 +143,7 @@ class AgentReachCollector:
             qualifier_terms += ['startup','scaleup']
         qualifier = '(' + ' OR '.join(qualifier_terms) + ')' if qualifier_terms else ''
 
-        role_expr = ' OR '.join(f'"{r}"' for r in roles[:3])
+        role_expr = ' OR '.join(f'"{r}"' for r in roles[:4])
         queries = []
         if category.type == 'government':
             for i in range(0, len(GOVERNMENT_DOMAINS), 5):
@@ -163,7 +151,8 @@ class AgentReachCollector:
                 queries.append(f'({role_expr}) {loc} {qualifier} ({domains}) recruitment careers apply')
             return [' '.join(q.split()) for q in queries][:12]
 
-        for role in roles[:4]:
+        # Direct role searches make every custom/new category immediately researchable.
+        for role in roles[:6]:
             queries.append(f'"{role}" {loc} {qualifier} careers apply')
 
         platforms = self._platform_priority(category)
@@ -175,7 +164,7 @@ class AgentReachCollector:
         queries.extend([
             f'({role_expr}) {loc} (site:boards.greenhouse.io OR site:job-boards.greenhouse.io OR site:jobs.lever.co OR site:jobs.ashbyhq.com)',
             f'({role_expr}) {loc} (site:jobs.smartrecruiters.com OR site:myworkdayjobs.com OR site:apply.workable.com OR site:recruitee.com)',
-            f'({role_expr}) {loc} careers "apply" cybersecurity networking cloud infrastructure',
+            f'({role_expr}) {loc} careers apply hiring',
         ])
 
         out, seen = [], set()
@@ -185,7 +174,7 @@ class AgentReachCollector:
             if key not in seen:
                 seen.add(key)
                 out.append(q)
-        return out[:28]
+        return out[:30]
 
     def _call_exa(self, query: str):
         if not self.available():
