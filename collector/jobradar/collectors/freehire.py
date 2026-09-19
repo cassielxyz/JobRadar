@@ -6,7 +6,8 @@ import httpx
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 from ..models import Job, Category
-from ..scoring import semantic_gate, location_matches
+from ..scoring import semantic_gate, location_plausible
+from ..category_research import category_search_terms
 
 API = 'https://freehire.me/api/v1/agent/jobs/search'
 
@@ -61,26 +62,17 @@ def _platform_name(x: dict, url: str):
 
 
 class FreeHireCollector:
-    """Keyless discovery across many ATS/company/job-board sources via FreeHire.
+    """Keyless dynamic discovery for every enabled category.
 
-    The collector intentionally retrieves a larger candidate pool than the dashboard needs.
-    JobRadar's semantic, location, fresher/experience and link-verification stages decide what
-    is actually eligible to display.
+    Search terms are generated from the category itself, so newly-created/custom categories
+    do not depend on a static list of hard-coded roles. A wider date window is used only when
+    the recent passes cannot fill a useful candidate pool.
     """
     def __init__(self):
-        self.client = httpx.Client(timeout=30, follow_redirects=True, headers={"User-Agent":"JobRadarEverywhere/1.0"})
+        self.client = httpx.Client(timeout=30, follow_redirects=True, headers={"User-Agent":"JobRadarEverywhere/1.2"})
 
     def _queries(self, category: Category):
-        seeds = []
-        for term in category.role_keywords + category.hidden_keywords:
-            t = ' '.join(str(term).split()).strip()
-            if len(t) < 4:
-                continue
-            if t.lower() not in [s.lower() for s in seeds]:
-                seeds.append(t)
-            if len(seeds) >= 8:
-                break
-        return seeds
+        return category_search_terms(category, limit=14)
 
     def _params(self, category: Category, query: str, days=60):
         params = {
@@ -104,18 +96,23 @@ class FreeHireCollector:
     def collect(self, category: Category, source_id='freehire', target_candidates=70):
         out = []
         seen = set()
-        # First pass stays recent. The second pass widens to 90 days only when the category
-        # still lacks enough plausible candidates to support a 10-job dashboard target.
-        for days in (45, 90):
-            for query in self._queries(category):
+        queries = self._queries(category)
+        if not queries:
+            return out
+
+        # 30/90 days prioritizes freshness; 180 days is a resilience pass for niche/new
+        # categories. Old entries are still rejected later if the listing is closed/stale.
+        for days in (30, 90, 180):
+            for query in queries:
                 try:
                     r = self.client.get(API, params=self._params(category, query, days=days))
                     r.raise_for_status()
-                    data = r.json().get('data') or []
+                    payload = r.json()
+                    data = payload.get('data') or payload.get('jobs') or []
                 except Exception:
                     continue
                 for x in data:
-                    url = str(x.get('url') or '').strip()
+                    url = str(x.get('url') or x.get('apply_url') or '').strip()
                     if not url or url in seen:
                         continue
                     seen.add(url)
@@ -145,15 +142,15 @@ class FreeHireCollector:
                             'discovered_via':'freehire',
                             'source_platform':platform,
                             'query':query,
+                            'query_window_days':days,
                             'source_kind':'job_board',
                         },
                     )
                     relevant, _ = semantic_gate(job, category)
                     if not relevant:
                         continue
-                    if job.location and not location_matches(job.location, category.locations):
-                        if 'remote' not in job.location.lower():
-                            continue
+                    if not location_plausible(job.location, category.locations):
+                        continue
                     out.append(job)
                     if len(out) >= target_candidates:
                         return out
