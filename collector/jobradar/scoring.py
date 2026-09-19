@@ -4,6 +4,7 @@ import re
 from .models import Category, Job
 from .extract import has_explicit_fresher_evidence
 from .trust import assess_job_trust
+from .category_research import category_search_terms, related_title_match
 
 LOCATION_ALIASES = {
     "bangalore":"bengaluru", "bengaluru":"bengaluru", "tn":"tamil nadu",
@@ -27,6 +28,7 @@ OPEN_ENDED_EXPERIENCE = re.compile(r"\b(?:(?:at\s+least|minimum(?:\s+of)?|min\.?
 HANDS_ON_EXPERIENCE = re.compile(r"\b(\d+(?:\.\d+)?)\s*(?:\+)?\s*(?:years?|yrs?)\s+(?:of\s+)?(?:hands[- ]on|professional|relevant|work|industry|soc|security|network|cloud)?\s*experience\b", re.I)
 EXPLICIT_MINIMUM = re.compile(r"\b(?:at\s+least|minimum(?:\s+of)?|min\.?)\s*(\d+(?:\.\d+)?)\s*(?:years?|yrs?)\b", re.I)
 PLUS_YEARS = re.compile(r"\b(\d+(?:\.\d+)?)\s*\+\s*(?:years?|yrs?)\b", re.I)
+BROAD_INDIA_LOCATION = re.compile(r"\b(india|pan[- ]?india|nationwide|multiple locations?|various locations?)\b", re.I)
 
 
 def norm(s: str) -> str:
@@ -57,6 +59,25 @@ def location_matches(job_location: str, locations: list[str]) -> list[str]:
     return hits
 
 
+def location_plausible(job_location: str, locations: list[str]) -> bool:
+    """Discovery-stage location gate that avoids false negatives.
+
+    Exact city/state matches are preferred, but country-wide or multi-location listings are
+    kept for later scoring because many job boards only expose "India" before the detail page
+    is opened. Remote remains opt-in unless no locations were configured.
+    """
+    if not locations or not job_location:
+        return True
+    if location_matches(job_location, locations):
+        return True
+    jl = _loc(job_location)
+    if BROAD_INDIA_LOCATION.search(jl):
+        return True
+    if 'remote' in jl:
+        return any('remote' in _loc(str(x)) for x in locations)
+    return False
+
+
 def source_allowed(category: Category, source_kind: str) -> bool:
     return not category.source_kinds or source_kind in category.source_kinds
 
@@ -64,52 +85,47 @@ def source_allowed(category: Category, source_kind: str) -> bool:
 def semantic_gate(job: Job, category: Category):
     """Hard category relevance gate before ranking.
 
-    Each category keeps its own role family. A networking/cyber resume therefore cannot make a
-    SOC vacancy relevant to a Software Developer category. Government hidden titles remain a
-    special case and need explicit CSE/IT or networking/security/cloud evidence.
+    New/custom categories are adaptive: their name, slug, configured role terms and safe
+    role-family expansions all participate in matching. This prevents a newly-created category
+    from returning zero results merely because a job board uses an adjacent title.
     """
     title = norm(job.title)
     body = norm(job.description)
     text = f"{title} {body}"
-    category_text = norm(' '.join([*(category.role_keywords or []), *(category.hidden_keywords or [])]))
+    role_terms = category_search_terms(category, limit=40)
+    category_text = norm(' '.join(role_terms))
     category_is_network_family = bool(CORE_TECH.search(category_text))
 
     if UNRELATED_DISCIPLINE_TITLE.search(title) and not CORE_TECH.search(title):
         return False, ["unrelated engineering discipline"]
 
-    role_hits_title = contains_any(title, category.role_keywords)
-    role_hits_body = contains_any(text, category.role_keywords)
+    role_hits_title = contains_any(title, role_terms)
+    role_hits_body = contains_any(text, role_terms)
+    related_title_hits = related_title_match(title, category)
     hidden_hits = contains_any(title, category.hidden_keywords) or contains_any(text, category.hidden_keywords)
     core = bool(CORE_TECH.search(text))
     cse = bool(CSE_EVIDENCE.search(text))
 
     if category.type == 'government':
-        relevant = bool(role_hits_title or role_hits_body or (category_is_network_family and core) or (hidden_hits and cse))
+        relevant = bool(role_hits_title or role_hits_body or related_title_hits or (category_is_network_family and core) or (hidden_hits and cse))
         if not relevant:
-            return False, ["no category-specific networking/cyber/cloud or CSE/IT evidence"]
+            return False, ["no category-specific role/CSE/IT evidence"]
     else:
-        # Direct role/hidden-title evidence works for any category, including software/custom.
-        relevant = bool(role_hits_title or role_hits_body or hidden_hits)
-        # Only networking/cyber/cloud categories may use generic CORE_TECH as a fallback.
+        relevant = bool(role_hits_title or role_hits_body or related_title_hits or hidden_hits)
         if not relevant and category_is_network_family and core:
             relevant = True
         if not relevant:
             return False, ["job does not match this category's role family"]
         if category.type == 'internship' and not INTERNSHIP_TITLE.search(text):
-            # An internship category must still have internship/trainee evidence.
             return False, ["listing is not clearly an internship/trainee role"]
 
     if getattr(category, 'fresher_only', False) and SENIOR_TITLE.search(title):
         return False, ["fresher-only category: senior-level title"]
     return True, []
 
-def fresher_gate(job: Job, category: Category):
-    """Apply strict experience rejection only when the category explicitly opts in.
 
-    This intentionally does not affect government/general/custom categories unless the owner
-    enables fresher_only on that category. It catches open-ended requirements such as 2+ years,
-    minimum 2 years and 2 years of hands-on experience, while allowing explicit 0-2 year ranges.
-    """
+def fresher_gate(job: Job, category: Category):
+    """Apply strict experience rejection only when the category explicitly opts in."""
     if not getattr(category, 'fresher_only', False):
         return True, []
     title = norm(job.title)
@@ -117,8 +133,6 @@ def fresher_gate(job: Job, category: Category):
     if SENIOR_TITLE.search(title):
         return False, ["fresher-only category: senior-level title"]
 
-    # Explicit fresher / 0-N ranges are strong positive evidence and should not be defeated by
-    # unrelated numbers elsewhere in a long description.
     range_matches = list(re.finditer(r"\b(\d+(?:\.\d+)?)\s*(?:-|to|–|—)\s*(\d+(?:\.\d+)?)\s*(?:years?|yrs?)\b", text, re.I))
     for m in range_matches:
         lo, hi = float(m.group(1)), float(m.group(2))
@@ -129,8 +143,6 @@ def fresher_gate(job: Job, category: Category):
     for rx, label in ((PLUS_YEARS, 'open-ended'), (EXPLICIT_MINIMUM, 'minimum'), (HANDS_ON_EXPERIENCE, 'hands-on')):
         for m in rx.finditer(text):
             years = float(m.group(1))
-            # 2+ / minimum 2 / two years hands-on are not fresher roles even when the category
-            # happens to have max_experience_years=2.
             if years >= 2 or years > float(category.max_experience_years):
                 hard.append(f"{label} {years:g}+ years requirement")
     if hard:
@@ -141,6 +153,7 @@ def fresher_gate(job: Job, category: Category):
     if job.experience_max is not None and float(job.experience_max) > float(category.max_experience_years):
         return False, ["fresher-only category: experience maximum exceeds target"]
     return True, []
+
 
 def score_job(job: Job, category: Category):
     gate, gate_reasons = semantic_gate(job, category)
@@ -155,8 +168,10 @@ def score_job(job: Job, category: Category):
         return 0, ["trust/scam gate: " + str((trust.get('reasons') or ['blocked'])[-1])], False
 
     text = " ".join([job.title, job.description, job.company])
-    title_hits = contains_any(job.title, category.role_keywords)
-    body_hits = contains_any(text, category.role_keywords)
+    role_terms = category_search_terms(category, limit=40)
+    title_hits = contains_any(job.title, role_terms)
+    body_hits = contains_any(text, role_terms)
+    related_hits = related_title_match(job.title, category)
     hidden_hits = contains_any(text, category.hidden_keywords)
     excludes = contains_any(text, category.exclude_keywords)
     location_hits = location_matches(job.location, category.locations)
@@ -171,6 +186,9 @@ def score_job(job: Job, category: Category):
     if title_hits:
         score += 32
         reasons.append("target role title")
+    elif related_hits:
+        score += 27
+        reasons.append("related role-title wording")
     elif body_hits:
         score += 22
         reasons.append("target role duties")
@@ -180,18 +198,19 @@ def score_job(job: Job, category: Category):
 
     if hidden_hits:
         score += min(12, 4 * len(hidden_hits))
-        reasons.append("adjacent government/technical title")
+        reasons.append("adjacent/hidden title")
 
     if location_hits:
         score += 15
         reasons.append("preferred location")
+    elif job.location and BROAD_INDIA_LOCATION.search(job.location):
+        score += 5
+        reasons.append("India/multi-location listing; exact city not disclosed")
     elif job.location:
         reasons.append("outside or unclear preferred location")
     else:
         reasons.append("location not disclosed")
 
-    # Experience is a strict eligibility gate only for categories marked fresher_only.
-    # Other categories keep experience as a ranking signal rather than an automatic rejection.
     if job.experience_max is not None:
         if job.experience_max <= category.max_experience_years:
             score += 15
@@ -247,6 +266,5 @@ def score_job(job: Job, category: Category):
     if category.require_official_verification and not job.official_verified:
         return max(0, min(100, score)), reasons + ["official verification required"], False
 
-    # Dashboard display uses a conservative floor. Alerts use the higher per-category threshold.
     eligible = score >= 40
     return max(0, min(100, score)), reasons, eligible
