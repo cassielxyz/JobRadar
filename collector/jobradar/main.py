@@ -21,7 +21,7 @@ from .extract import (
     infer_money, infer_experience, infer_deadline, infer_event_type,
     infer_application_status, infer_location, is_stale_title,
 )
-from .scoring import score_job, source_allowed, semantic_gate, location_matches
+from .scoring import score_job, source_allowed, semantic_gate, location_plausible
 from .ai import review_job, merge_ai_score
 from .notifications import get_settings, deliver, any_success
 from .resume_match import load_candidate, apply_candidate_to_categories, personalized_score, should_queue_auto_apply
@@ -108,8 +108,9 @@ def _process_job(db, job, source, target_categories, run_errors, notification_se
     if not target_categories:
         return
 
-    # Cheap enrichment + hard semantic/location gates happen before network verification.
-    # This prevents broad discovery sources from spending minutes verifying hundreds of irrelevant URLs.
+    # Cheap enrichment + semantic/location gates happen before network verification.
+    # Country-wide/multi-location listings are retained because many boards only expose
+    # the exact city after the job detail page is opened.
     job = _enrich(job, source)
     if job.application_status == 'closed':
         return
@@ -118,11 +119,8 @@ def _process_job(db, job, source, target_categories, run_errors, notification_se
         ok, _ = semantic_gate(job, cat)
         if not ok:
             continue
-        if job.location and not location_matches(job.location, cat.locations):
-            loc = (job.location or '').lower()
-            allows_remote = any('remote' in str(x).lower() for x in cat.locations)
-            if 'remote' not in loc or not allows_remote:
-                continue
+        if not location_plausible(job.location, cat.locations):
+            continue
         gated.append(cat)
     target_categories = gated
     if not target_categories:
@@ -292,7 +290,7 @@ def run(trigger='schedule'):
                 errors.append({'source':source['id'],'error':str(e)[:500]})
                 db.update('sources', {'last_error':str(e)[:1000]}, {'id':f"eq.{source['id']}"})
 
-        # 2) FreeHire: broad, keyless coverage of ATS/company/job-board sources for private jobs.
+        # 2) FreeHire: dynamic, keyless coverage for every category that allows job boards.
         fh_source = source_by_id.get('freehire')
         if fh_source:
             for cat in [c for c in cats if source_allowed(c, 'job_board')]:
@@ -304,7 +302,7 @@ def run(trigger='schedule'):
                 except Exception as e:
                     errors.append({'source':'freehire','category':cat.slug,'error':str(e)[:500]})
 
-        # 3) Agent Reach / Exa: optional hidden web discovery, only when its backend is usable.
+        # 3) Agent Reach / Exa: category-aware public-web discovery for categories that allow community sources.
         ar_source = source_by_id.get('agent-reach')
         if ar_source and agent_reach.enabled():
             for cat in [c for c in cats if source_allowed(c, 'community')]:
