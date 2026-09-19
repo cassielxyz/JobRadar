@@ -1,4 +1,4 @@
-from jobradar.collectors.agent_reach import AgentReachCollector, PLATFORMS, _platform_for
+from jobradar.collectors.agent_reach import AgentReachCollector, PLATFORMS, _platform_for, _clean_title
 from jobradar.models import Category
 
 
@@ -32,3 +32,8 @@ def test_fresher_queries_include_major_india_boards_and_ats():
     assert 'site:linkedin.com' in queries
     assert 'site:jobs.lever.co' in queries
     assert 'fresher' in queries
+
+
+def test_search_result_title_is_cleaned():
+    dirty='URL: [Network Engineer Fresher](https://example.com/jobs/1) https://example.com/jobs/1'
+    assert _clean_title(dirty) == 'Network Engineer Fresher'
