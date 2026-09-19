@@ -19,8 +19,6 @@ URL_RE = re.compile(r'https?://[^\s\]\)\}"\']+')
 ROOT = Path(__file__).resolve().parents[3]
 PLATFORM_FILE = ROOT / 'config' / 'discovery_platforms.yaml'
 
-# Public job boards/aggregators are useful discovery evidence, but they are not treated as
-# trusted final Apply destinations. JobRadar still resolves/verifies the employer/ATS URL.
 GOVERNMENT_DOMAINS = (
     'tnpsc.gov.in','tamilnaducareerservices.tn.gov.in','keralapsc.gov.in','cmd.kerala.gov.in',
     'careers-itmission.kerala.gov.in','itmission.kerala.gov.in','tanfinet.tn.gov.in','drdo.gov.in',
@@ -43,6 +41,24 @@ DISCOVERY_ONLY_HINTS = (
 
 def _host(url: str) -> str:
     return (urlparse(url).hostname or '').lower()
+
+
+def _clean_title(value: str, fallback: str = '') -> str:
+    """Turn noisy search-result titles into a compact human job title."""
+    text = str(value or '').replace('\n', ' ').strip()
+    # Markdown link -> visible label, then remove any remaining raw URLs.
+    text = re.sub(r'\[([^\]]{2,160})\]\(https?://[^)]+\)', r'\1', text)
+    text = URL_RE.sub('', text)
+    # Common Exa/social metadata prefixes.
+    text = re.sub(r'^\s*(?:URL\s*:|[-–—]+)\s*', '', text, flags=re.I)
+    text = re.sub(r'^\s*\[[^\]]*(?:20\d{2}|liked?|reposted?)[^\]]*\]\s*', '', text, flags=re.I)
+    text = re.sub(r'\s*[·|]\s*(?:LinkedIn|Indeed|Naukri|Internshala|Shine)\s*$', '', text, flags=re.I)
+    text = re.sub(r'\s+', ' ', text).strip(' -–—|:[]()')
+    if not text or len(text) < 3 or text.lower().startswith(('http', 'www.')):
+        text = str(fallback or '').split('\n', 1)[0].strip()
+        text = URL_RE.sub('', text)
+        text = re.sub(r'\s+', ' ', text).strip(' -–—|:[]()')
+    return (text or 'Job opening')[:180]
 
 
 def _walk(obj):
@@ -80,11 +96,10 @@ def _platform_for(url: str):
 
 
 class AgentReachCollector:
-    """Parallel web discovery across 70+ job platforms through Agent Reach / Exa.
+    """Parallel discovery across public boards and employer ATS pages.
 
-    Naukri, LinkedIn, Indeed and other public boards are discovery leads only. The rest of
-    JobRadar still enforces role/location/experience rules and verifies the final application
-    destination before a job becomes a trusted match.
+    Public boards are discovery leads only. Legal/login/search/social-post URLs are discarded;
+    JobRadar still verifies role, location, experience and the final usable destination.
     """
 
     def enabled(self):
@@ -143,8 +158,6 @@ class AgentReachCollector:
         role_expr = ' OR '.join(f'"{r}"' for r in roles[:3])
         queries = []
         if category.type == 'government':
-            # Many official portals rate-limit or block GitHub runner IPs. Exa can still discover
-            # their indexed official vacancies; JobRadar verifies the returned official domain.
             for i in range(0, len(GOVERNMENT_DOMAINS), 5):
                 domains = ' OR '.join(f'site:{d}' for d in GOVERNMENT_DOMAINS[i:i+5])
                 queries.append(f'({role_expr}) {loc} {qualifier} ({domains}) recruitment careers apply')
@@ -193,12 +206,12 @@ class AgentReachCollector:
                 title = str(x.get('title') or x.get('name') or '').strip()
                 snippet = str(x.get('text') or x.get('snippet') or x.get('description') or '')
                 if url and not is_non_job_url(url):
-                    rows.append((title, url, snippet, x))
+                    rows.append((_clean_title(title, snippet), url, snippet, x))
         except Exception:
             for line in text.splitlines():
                 for url in URL_RE.findall(line):
                     if not is_non_job_url(url):
-                        rows.append((line[:180], url, line[:1000], {'raw_line': line}))
+                        rows.append((_clean_title(line[:180], line), url, line[:1000], {'raw_line': line}))
         return rows
 
     def collect(self, category: Category, source_id='agent-reach', target_candidates=70):
@@ -227,7 +240,7 @@ class AgentReachCollector:
                     discovery_only = any(host == d or host.endswith('.'+d) for d in DISCOVERY_ONLY_HINTS)
                     company = 'External job-platform discovery' if discovery_only else 'Web discovery'
                     job = Job(
-                        title=(title or snippet or url)[:240], company=company, location='',
+                        title=_clean_title(title, snippet), company=company, location='',
                         description=(snippet or title)[:6000], source_id=source_id,
                         source_url=url, canonical_url=url,
                         raw={
