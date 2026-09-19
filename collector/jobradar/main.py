@@ -4,9 +4,12 @@ import os
 import json
 import hashlib
 import argparse
+import html
+import re
 import yaml
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 from .db import SupabaseREST
 from .models import Category
@@ -29,6 +32,10 @@ from .integration_config import apply_dashboard_integrations
 
 ROOT = Path(__file__).resolve().parents[2]
 DISPLAY_MIN_SCORE = int(os.getenv('DASHBOARD_MIN_SCORE', '40') or 40)
+SUPPRESS_APPLICATION_STATUSES = {
+    'queued', 'review_required', 'submitted', 'applied_manual', 'interview',
+    'offer', 'rejected', 'withdrawn', 'skipped',
+}
 
 
 def fp(job):
@@ -58,6 +65,53 @@ def load_and_seed_sources(db):
     return db.select('sources', {'select':'*','enabled':'eq.true','order':'priority.desc'})
 
 
+def _summary(value, limit=420):
+    text = html.unescape(str(value or ''))
+    text = re.sub(r'<[^>]+>', ' ', text)
+    text = re.sub(r'https?://\S+', '', text)
+    text = re.sub(r'\s+', ' ', text).strip(' -–—|')
+    if len(text) <= limit:
+        return text
+    clipped = text[:limit].rsplit(' ', 1)[0].rstrip(' ,;:-')
+    return clipped + '…'
+
+
+def _source_label(job):
+    raw = job.raw or {}
+    explicit = str(raw.get('source_platform') or raw.get('source_name') or '').strip()
+    if explicit:
+        return explicit[:80]
+    for value in (job.apply_url, job.canonical_url, job.source_url):
+        try:
+            host = (urlparse(value or '').hostname or '').lower().removeprefix('www.')
+        except Exception:
+            host = ''
+        if host:
+            known = {
+                'linkedin.com':'LinkedIn', 'internshala.com':'Internshala', 'shine.com':'Shine',
+                'naukri.com':'Naukri', 'indeed.com':'Indeed', 'foundit.in':'Foundit',
+                'cutshort.io':'Cutshort', 'wellfound.com':'Wellfound',
+            }
+            for domain, name in known.items():
+                if host == domain or host.endswith('.' + domain):
+                    return name
+            return host
+    return 'Verified source'
+
+
+def _already_tracked_application(db, candidate, job_id):
+    uid = ((candidate or {}).get('preferences') or {}).get('user_id')
+    if not uid:
+        return False
+    try:
+        rows = db.select('applications', {
+            'select':'status', 'user_id':f'eq.{uid}', 'job_id':f'eq.{job_id}', 'limit':'1'
+        })
+        return bool(rows and str(rows[0].get('status') or '') in SUPPRESS_APPLICATION_STATUSES)
+    except Exception:
+        return False
+
+
 def alert_text(job, cat, score, reasons):
     compensation = 'Salary not disclosed'
     if job.salary_min_monthly:
@@ -67,6 +121,8 @@ def alert_text(job, cat, score, reasons):
     if job.stipend_monthly:
         compensation = f"Stipend ₹{job.stipend_monthly:,}/month"
     destination = job.apply_url if job.event_type == 'vacancy' else (job.notification_url or job.canonical_url)
+    summary = _summary(job.description)
+    source = _source_label(job)
     lines = [
         f"JobRadar Everywhere — {score}% match",
         job.title,
@@ -74,12 +130,17 @@ def alert_text(job, cat, score, reasons):
         f"Location: {job.location or 'Not disclosed'}",
         f"Compensation: {compensation}",
         f"Category: {cat.name}",
-        f"Why: {'; '.join(reasons[:4])}",
+        f"Source: {source}",
     ]
+    if summary:
+        lines.append(f"Summary: {summary}")
+    lines.append(f"Why: {'; '.join(reasons[:4])}")
     if job.deadline:
         lines.append(f"Deadline: {job.deadline}")
     if destination:
         lines.append(f"Open: {destination}")
+    if job.source_url and job.source_url != destination:
+        lines.append(f"Source URL: {job.source_url}")
     if job.notification_url and job.notification_url != destination:
         lines.append(f"Official notification: {job.notification_url}")
     return '\n'.join(lines)
@@ -194,16 +255,17 @@ def _process_job(db, job, source, target_categories, run_errors, notification_se
             eligible = False
 
         stats['matched'] += 1 if eligible else 0
-        existing = db.select('job_matches', {
-            'select':'alerted_at', 'job_id':f'eq.{jid}', 'category_id':f'eq.{cat.id}'
-        })
-        already = bool(existing and existing[0].get('alerted_at'))
+        # A job is a single notification item even if it matches multiple categories.
+        # Once any category has successfully alerted it, later categories/runs stay quiet.
+        existing = db.select('job_matches', {'select':'alerted_at', 'job_id':f'eq.{jid}'})
+        already = any(bool(x.get('alerted_at')) for x in existing)
         notify_floor = max(int(cat.alert_threshold), int(notification_settings.get('minimum_score') or 70))
         destination_ok = (
             (job.event_type == 'vacancy' and job.apply_verified and bool(job.apply_url)) or
             (job.event_type == 'exam_update' and job.official_verified and bool(job.notification_url or job.canonical_url))
         )
-        should_alert = eligible and score >= notify_floor and destination_ok and not already
+        tracked_application = _already_tracked_application(db, candidate, jid)
+        should_alert = eligible and score >= notify_floor and destination_ok and not already and not tracked_application
         active_resume_id = (candidate or {}).get('preferences', {}).get('active_resume_id') if candidate else None
         payload = {
             'job_id':jid, 'category_id':cat.id, 'score':score, 'rule_score':rule_score, 'reasons':reasons,
