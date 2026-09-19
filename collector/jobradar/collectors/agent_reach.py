@@ -13,6 +13,7 @@ import yaml
 
 from ..models import Job, Category
 from ..scoring import semantic_gate
+from ..linkresolver import is_non_job_url
 
 URL_RE = re.compile(r'https?://[^\s\]\)\}"\']+')
 ROOT = Path(__file__).resolve().parents[3]
@@ -191,12 +192,13 @@ class AgentReachCollector:
                 url = str(x.get('url') or '').strip()
                 title = str(x.get('title') or x.get('name') or '').strip()
                 snippet = str(x.get('text') or x.get('snippet') or x.get('description') or '')
-                if url:
+                if url and not is_non_job_url(url):
                     rows.append((title, url, snippet, x))
         except Exception:
             for line in text.splitlines():
                 for url in URL_RE.findall(line):
-                    rows.append((line[:180], url, line[:1000], {'raw_line': line}))
+                    if not is_non_job_url(url):
+                        rows.append((line[:180], url, line[:1000], {'raw_line': line}))
         return rows
 
     def collect(self, category: Category, source_id='agent-reach', target_candidates=70):
@@ -215,7 +217,7 @@ class AgentReachCollector:
                 except Exception:
                     rows = []
                 for title, url, snippet, raw in rows:
-                    if not url or url in seen:
+                    if not url or url in seen or is_non_job_url(url):
                         continue
                     seen.add(url)
                     platform = _platform_for(url)
