@@ -7,8 +7,10 @@ import re
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
 
 from .db import SupabaseREST
+from .dedupe import job_identity_keys, normalized_url_key
 from .integration_config import apply_dashboard_integrations
 from .notifications import deliver, get_settings, any_success
 from .resume_match import load_candidate
@@ -21,7 +23,9 @@ SUPPRESS_APPLICATION_STATUSES = {
     'offer', 'rejected', 'withdrawn', 'skipped',
 }
 FALLBACK_MIN_SCORE = max(40, min(69, int(os.getenv('NTFY_FALLBACK_MIN_SCORE', '55') or 55)))
-FALLBACK_MAX_TOTAL = max(1, min(6, int(os.getenv('NTFY_FALLBACK_MAX_TOTAL', '3') or 3)))
+DAILY_ALERT_TARGET = max(1, min(25, int(os.getenv('JOBRADAR_DAILY_ALERT_TARGET', '10') or 10)))
+HISTORY_LIMIT = max(1000, min(10000, int(os.getenv('JOBRADAR_ALERT_HISTORY_LIMIT', '5000') or 5000)))
+LOCAL_TZ = ZoneInfo(os.getenv('JOBRADAR_TIMEZONE', 'Asia/Kolkata'))
 
 
 def _clean_title(value):
@@ -47,13 +51,7 @@ def _safe_url(value):
 
 
 def _destination(job):
-    """Prefer a verified direct apply URL, then a verified-safe live job page.
-
-    Every row in `jobs` reached this table only after the collector's URL verifier accepted its
-    canonical URL. Requiring `apply_verified` as the *only* possible destination starved ntfy
-    whenever a job board hid its apply button from server-side HTML. The canonical fallback is
-    still passed through the strict non-job/login/legal filter.
-    """
+    """Prefer a verified direct apply URL, then a verified-safe live job page."""
     if job.get('event_type') == 'vacancy':
         apply_url = _safe_url(job.get('apply_url'))
         if job.get('apply_verified') and apply_url:
@@ -68,11 +66,7 @@ def _destination(job):
 
 
 def _fallback_floor(normal_floor):
-    """Never let a 70+ preference turn a healthy research run into permanent silence.
-
-    The user's normal/category threshold remains the primary alert gate. Only when a run has no
-    new primary candidates does the digest expose a tiny set of otherwise-eligible verified jobs.
-    """
+    """Relax the normal threshold only enough to fill the daily new-job target."""
     return min(max(40, int(normal_floor or 70)), FALLBACK_MIN_SCORE)
 
 
@@ -85,6 +79,9 @@ def _host_label(url):
         'linkedin.com':'LinkedIn','naukri.com':'Naukri','indeed.com':'Indeed',
         'internshala.com':'Internshala','shine.com':'Shine','foundit.in':'Foundit',
         'cutshort.io':'Cutshort','instahyre.com':'Instahyre','wellfound.com':'Wellfound',
+        'freshersworld.com':'Freshersworld','hirist.tech':'Hirist','apna.co':'Apna',
+        'unstop.com':'Unstop','jobs.weekday.works':'Weekday','cuvette.tech':'Cuvette',
+        'joinsuperset.com':'Superset','geektrust.com':'Geektrust','talent500.co':'Talent500',
     }
     for domain, label in known.items():
         if h == domain or h.endswith('.'+domain):
@@ -106,7 +103,7 @@ def _walk_company(value, depth=0):
     if depth > 3:
         return ''
     if isinstance(value, dict):
-        for key in ('company_name', 'company', 'employer_name', 'employer', 'organization'):
+        for key in ('company_name', 'companyName', 'company', 'employer_name', 'employerName', 'employer', 'organization'):
             item = value.get(key)
             if isinstance(item, str) and item.strip():
                 return item.strip()
@@ -153,8 +150,61 @@ def _applied_job_ids(db, user_id):
     }
 
 
-def _prepare_candidates(rows, applied_ids, settings):
+def _parse_ts(value):
+    try:
+        return datetime.fromisoformat(str(value or '').replace('Z', '+00:00'))
+    except Exception:
+        return None
+
+
+def _primary_identity(keys, fallback):
+    keys = set(keys or set())
+    for prefix in ('role:', 'req:', 'url:'):
+        values = sorted(k for k in keys if k.startswith(prefix))
+        if values:
+            return values[0]
+    return str(fallback or '')
+
+
+def _historical_alert_state(db):
+    """Load every recent alerted identity, not merely the current job ID.
+
+    The old code only remembered `job_id`. The same vacancy found later on Naukri, LinkedIn,
+    Indeed or an employer ATS therefore received a different ID and was notified again. This
+    history uses normalized URL and role/company/location identities across sources.
+    """
+    try:
+        rows = db.select('job_matches', {
+            'select': 'job_id,alerted_at,job:jobs(id,title,company,location,raw,apply_url,canonical_url,source_url,notification_url)',
+            'alerted_at': 'not.is.null',
+            'order': 'alerted_at.desc',
+            'limit': str(HISTORY_LIMIT),
+        })
+    except Exception:
+        rows = []
+
+    historical_keys = set()
+    today_items = set()
+    today = datetime.now(LOCAL_TZ).date()
+    for row in rows:
+        job = row.get('job') or {}
+        jid = str(job.get('id') or row.get('job_id') or '')
+        keys = job_identity_keys(job)
+        historical_keys.update(keys)
+        ts = _parse_ts(row.get('alerted_at'))
+        if ts:
+            try:
+                local_date = ts.astimezone(LOCAL_TZ).date() if ts.tzinfo else ts.replace(tzinfo=timezone.utc).astimezone(LOCAL_TZ).date()
+            except Exception:
+                local_date = None
+            if local_date == today:
+                today_items.add(_primary_identity(keys, jid))
+    return historical_keys, len(today_items)
+
+
+def _prepare_candidates(rows, applied_ids, settings, historical_keys=None):
     diagnostics = Counter()
+    historical_keys = set(historical_keys or set())
     globally_alerted = {
         str((row.get('job') or {}).get('id') or row.get('job_id') or '')
         for row in rows if row.get('alerted_at')
@@ -162,6 +212,7 @@ def _prepare_candidates(rows, applied_ids, settings):
     candidates = []
     seen_jobs = set()
     seen_destinations = set()
+    seen_identity_keys = set()
 
     for row in rows:
         job = row.get('job') or {}
@@ -187,14 +238,22 @@ def _prepare_candidates(rows, applied_ids, settings):
         if not destination:
             diagnostics['no_safe_destination'] += 1
             continue
-        destination_key = destination.split('?', 1)[0].rstrip('/').casefold()
-        if destination_key in seen_destinations:
+        destination_key = normalized_url_key(destination)
+        if destination_key and destination_key in seen_destinations:
             diagnostics['duplicate_destination'] += 1
             continue
 
         title = _meaningful_title(job.get('title'))
         if not title:
             diagnostics['generic_title'] += 1
+            continue
+
+        identity_keys = job_identity_keys(job)
+        if identity_keys & historical_keys:
+            diagnostics['already_alerted_equivalent'] += 1
+            continue
+        if identity_keys and identity_keys & seen_identity_keys:
+            diagnostics['duplicate_cross_source'] += 1
             continue
 
         score = int(row.get('score') or 0)
@@ -206,12 +265,15 @@ def _prepare_candidates(rows, applied_ids, settings):
             'job_id': jid,
             'destination': destination,
             'destination_key': destination_key,
+            'identity_keys': identity_keys,
             'title': title,
             'score': score,
             'normal_floor': normal_floor,
         })
         seen_jobs.add(jid)
-        seen_destinations.add(destination_key)
+        if destination_key:
+            seen_destinations.add(destination_key)
+        seen_identity_keys.update(identity_keys)
 
     return candidates, diagnostics
 
@@ -229,26 +291,32 @@ def run(limit_per_category=10):
         return result
 
     applied_ids = _applied_job_ids(db, user_id)
+    historical_keys, alerted_today = _historical_alert_state(db)
     rows = db.select('job_matches', {
         'select': 'job_id,category_id,score,eligible,alerted_at,reasons,resume_reasons,category:categories(id,name,slug,alert_threshold),job:jobs(id,title,company,location,description,raw,source_id,apply_url,apply_verified,notification_url,canonical_url,source_url,active,application_status,event_type,official_verified,link_confidence)',
         'eligible': 'eq.true',
         'order': 'score.desc',
-        'limit': '1000',
+        'limit': '1500',
     })
 
-    candidates, diagnostics = _prepare_candidates(rows, applied_ids, settings)
+    candidates, diagnostics = _prepare_candidates(rows, applied_ids, settings, historical_keys)
     primary = [x for x in candidates if x['score'] >= x['normal_floor']]
-    fallback_mode = not bool(primary)
-    if fallback_mode:
-        chosen = [x for x in candidates if x['score'] >= _fallback_floor(x['normal_floor'])][:FALLBACK_MAX_TOTAL]
-    else:
-        chosen = primary
+    fallback = [
+        x for x in candidates
+        if x['score'] < x['normal_floor'] and x['score'] >= _fallback_floor(x['normal_floor'])
+    ]
+    remaining_today = max(0, DAILY_ALERT_TARGET - alerted_today)
+    ordered = primary + fallback
 
     sent = []
     category_counts = defaultdict(int)
     max_items = max(1, min(10, int(limit_per_category)))
+    delivered_this_run = 0
 
-    for item in chosen:
+    for item in ordered:
+        if delivered_this_run >= remaining_today:
+            break
+
         row = item['row']
         job = item['job']
         cat = item['cat']
@@ -256,9 +324,17 @@ def run(limit_per_category=10):
         destination = item['destination']
         title = item['title']
         score = item['score']
+        mode = 'primary' if score >= item['normal_floor'] else 'fallback'
         category = cat.get('name') or 'Other'
         if category_counts[category] >= max_items:
             diagnostics['category_cap'] += 1
+            continue
+
+        # Re-check the live history set because an earlier item in this same run may be an
+        # equivalent listing from another source.
+        identity_keys = item.get('identity_keys') or set()
+        if identity_keys & historical_keys:
+            diagnostics['duplicate_after_selection'] += 1
             continue
 
         company = _company(job, destination)
@@ -275,8 +351,8 @@ def run(limit_per_category=10):
             f'Category: {category}',
             f'Source: {source}',
         ]
-        if fallback_mode:
-            plain.append('Alert level: good verified fallback (no stronger new jobs this run)')
+        if mode == 'fallback':
+            plain.append('Alert level: good verified match used to fill today’s new-job target')
         if summary:
             plain.append(f'Summary: {summary}')
         if reasons:
@@ -291,8 +367,8 @@ def run(limit_per_category=10):
             f'🌐 **Source:** {source}',
             '✅ **Direct application verified**' if direct_apply else '✅ **Live job page verified**',
         ]
-        if fallback_mode:
-            rich += ['', '🟡 **Good verified match**', 'No stronger new job passed your normal alert score in this run.']
+        if mode == 'fallback':
+            rich += ['', '🟡 **Good verified match**', 'Included because today has not yet reached the new-job target.']
         if summary:
             rich += ['', '**Role summary**', summary]
         if reasons:
@@ -305,7 +381,7 @@ def run(limit_per_category=10):
             'clear':False,
         }]
         source_url = _safe_url(job.get('source_url'))
-        if source_url and source_url != destination:
+        if source_url and normalized_url_key(source_url) != normalized_url_key(destination):
             actions.append({'action':'view', 'label':'🌐 View source', 'url':source_url, 'clear':False})
         if len(actions) < 3:
             actions.append({'action':'copy', 'label':'📋 Copy title', 'value':title, 'clear':False})
@@ -323,11 +399,11 @@ def run(limit_per_category=10):
         delivered = any_success(results)
         if delivered:
             stamp = datetime.now(timezone.utc).isoformat()
-            # Mark every category match for this job so the same vacancy cannot reappear under
-            # another category on the next run.
             db.update('job_matches', {'alerted_at':stamp}, {'job_id':f'eq.{jid}'})
             category_counts[category] += 1
-            diagnostics['delivered_fallback' if fallback_mode else 'delivered_primary'] += 1
+            delivered_this_run += 1
+            historical_keys.update(identity_keys)
+            diagnostics['delivered_' + mode] += 1
         else:
             diagnostics['delivery_failed'] += 1
 
@@ -336,20 +412,25 @@ def run(limit_per_category=10):
             'job_id': jid,
             'title': title,
             'score': score,
-            'mode': 'fallback' if fallback_mode else 'primary',
+            'mode': mode,
             'delivered': delivered,
             'channels': results,
         })
 
-    if not primary:
-        diagnostics['below_normal_floor'] = sum(1 for x in candidates if x['score'] < x['normal_floor'])
-        diagnostics['below_fallback_floor'] = sum(1 for x in candidates if x['score'] < _fallback_floor(x['normal_floor']))
+    diagnostics['below_normal_floor'] = sum(1 for x in candidates if x['score'] < x['normal_floor'])
+    diagnostics['below_fallback_floor'] = sum(1 for x in candidates if x['score'] < _fallback_floor(x['normal_floor']))
+    if remaining_today == 0:
+        diagnostics['daily_target_already_reached'] += 1
 
     summary = {
         'digest': 'complete',
-        'mode': 'fallback' if fallback_mode else 'primary',
+        'mode': 'daily-target-reached' if remaining_today == 0 else ('mixed' if primary and fallback else ('primary' if primary else 'fallback')),
+        'daily_target': DAILY_ALERT_TARGET,
+        'alerted_today_before_run': alerted_today,
+        'remaining_daily_target_before_run': remaining_today,
         'candidates': len(candidates),
         'primary_candidates': len(primary),
+        'fallback_candidates': len(fallback),
         'sent': sent,
         'delivered': sum(1 for x in sent if x['delivered']),
         'diagnostics': dict(diagnostics),
