@@ -9,13 +9,13 @@ permissions:
   copilot-requests: write
 
 concurrency:
-  group: jobradar-research-v11
+  group: jobradar-research-v12
   cancel-in-progress: false
 
 jobs:
   research:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -51,7 +51,7 @@ jobs:
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
         run: python -m jobradar.resume_enrich --active || true
 
-      - name: Research, verify, dual-AI review, score and alert
+      - name: Research, verify, dual-AI review and score
         working-directory: collector
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -75,13 +75,17 @@ jobs:
           ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
           AGENT_REACH_ENABLED: ${{ vars.AGENT_REACH_ENABLED || 'true' }}
           AGENT_REACH_WORKERS: '6'
+          DEFER_NOTIFICATIONS_TO_DIGEST: 'true'
         run: python -m jobradar.main --trigger github-actions
 
-      - name: Send real-job ntfy digest
+      - name: Send unique real-job ntfy digest
         working-directory: collector
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           NTFY_SERVER: ${{ vars.NTFY_SERVER }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          JOBRADAR_DAILY_ALERT_TARGET: '10'
+          JOBRADAR_TIMEZONE: 'Asia/Kolkata'
+          NTFY_FALLBACK_MIN_SCORE: '55'
         run: python -m jobradar.digest --limit 10
