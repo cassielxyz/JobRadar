@@ -20,6 +20,7 @@ from .collectors.freehire import FreeHireCollector
 from .collectors.agent_reach import AgentReachCollector
 from .verify import verify_url
 from .linkresolver import resolve_job_links
+from .dedupe import normalized_url_key
 from .extract import (
     infer_money, infer_experience, infer_deadline, infer_event_type,
     infer_application_status, infer_location, is_stale_title,
@@ -32,6 +33,10 @@ from .integration_config import apply_dashboard_integrations
 
 ROOT = Path(__file__).resolve().parents[2]
 DISPLAY_MIN_SCORE = int(os.getenv('DASHBOARD_MIN_SCORE', '40') or 40)
+# Research stores/scorers every candidate first; the digest is the single notification gate.
+# This matters because only the digest sees the full cross-source history and can suppress the
+# same vacancy when it is mirrored by Naukri, LinkedIn, Indeed and an employer ATS.
+DEFER_NOTIFICATIONS_TO_DIGEST = os.getenv('DEFER_NOTIFICATIONS_TO_DIGEST', 'true').lower() in {'1','true','yes','on'}
 SUPPRESS_APPLICATION_STATUSES = {
     'queued', 'review_required', 'submitted', 'applied_manual', 'interview',
     'offer', 'rejected', 'withdrawn', 'skipped',
@@ -39,9 +44,12 @@ SUPPRESS_APPLICATION_STATUSES = {
 
 
 def fp(job):
+    # Preserve job-identifying query params such as Indeed `jk`, while dropping tracking params.
+    # This avoids both duplicate records from UTM/ref URLs and accidental merging of two distinct
+    # query-based job detail pages.
     basis = '|'.join([
         job.title.lower().strip(), job.company.lower().strip(),
-        job.canonical_url.split('?')[0], job.event_type,
+        normalized_url_key(job.canonical_url), job.event_type,
     ])
     return hashlib.sha256(basis.encode()).hexdigest()
 
@@ -255,8 +263,6 @@ def _process_job(db, job, source, target_categories, run_errors, notification_se
             eligible = False
 
         stats['matched'] += 1 if eligible else 0
-        # A job is a single notification item even if it matches multiple categories.
-        # Once any category has successfully alerted it, later categories/runs stay quiet.
         existing = db.select('job_matches', {'select':'alerted_at', 'job_id':f'eq.{jid}'})
         already = any(bool(x.get('alerted_at')) for x in existing)
         notify_floor = max(int(cat.alert_threshold), int(notification_settings.get('minimum_score') or 70))
@@ -265,7 +271,10 @@ def _process_job(db, job, source, target_categories, run_errors, notification_se
             (job.event_type == 'exam_update' and job.official_verified and bool(job.notification_url or job.canonical_url))
         )
         tracked_application = _already_tracked_application(db, candidate, jid)
-        should_alert = eligible and score >= notify_floor and destination_ok and not already and not tracked_application
+        should_alert = (
+            not DEFER_NOTIFICATIONS_TO_DIGEST and
+            eligible and score >= notify_floor and destination_ok and not already and not tracked_application
+        )
         active_resume_id = (candidate or {}).get('preferences', {}).get('active_resume_id') if candidate else None
         payload = {
             'job_id':jid, 'category_id':cat.id, 'score':score, 'rule_score':rule_score, 'reasons':reasons,
@@ -384,6 +393,7 @@ def run(trigger='schedule'):
                 'attempts':stats['notification_attempts'],
                 'successes':stats['notification_successes'],
                 'auto_apply_queued':stats.get('auto_apply_queued',0),
+                'deferred_to_digest':DEFER_NOTIFICATIONS_TO_DIGEST,
             },
         }, {'id':f'eq.{runid}'})
     except Exception as e:
@@ -393,7 +403,7 @@ def run(trigger='schedule'):
         }, {'id':f'eq.{runid}'})
         raise
 
-    print(json.dumps({**stats, 'errors':errors}, indent=2))
+    print(json.dumps({**stats, 'errors':errors, 'notifications_deferred_to_digest':DEFER_NOTIFICATIONS_TO_DIGEST}, indent=2))
 
 
 if __name__ == '__main__':
