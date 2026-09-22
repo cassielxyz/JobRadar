@@ -3,6 +3,7 @@ from __future__ import annotations
 import httpx
 from ..models import Job
 from ..extract import links_from_html, visible_text, best_heading, infer_location, is_stale_title
+from ..pdf_text import extract_pdf_text
 
 ROLE_HINTS = (
     'job','career','recruit','vacan','notification','apprent','engineer','scientist','technical',
@@ -24,9 +25,13 @@ class GenericCollector:
             if r.status_code >= 400:
                 return fallback_title, fallback_title, str(r.url)
             content_type = r.headers.get('content-type', '').lower()
+            is_pdf = 'pdf' in content_type or str(r.url).lower().split('?')[0].endswith('.pdf')
+            if is_pdf:
+                text = extract_pdf_text(r.content)
+                return fallback_title, text or fallback_title, str(r.url)
             if 'html' not in content_type:
                 return fallback_title, fallback_title, str(r.url)
-            text = visible_text(r.text)[:20000]
+            text = visible_text(r.text)[:60000]
             title = best_heading(r.text, fallback_title)
             return title, text or fallback_title, str(r.url)
         except Exception:
@@ -59,7 +64,11 @@ class GenericCollector:
                 source_id=source['id'],
                 source_url=source['url'],
                 canonical_url=final_url,
-                raw={'discovery_title': title, 'source_kind': source.get('kind')},
+                raw={
+                    'discovery_title': title,
+                    'source_kind': source.get('kind'),
+                    'document_text_extracted': description != (detail_title or title),
+                },
             ))
             # Respectful cap per government index page; next run will revisit the source.
             if len(jobs) >= 80:
