@@ -5,24 +5,38 @@ import re
 import httpx
 from bs4 import BeautifulSoup
 
-UA = {"User-Agent": "Mozilla/5.0 JobRadarEverywhere/1.1 (+personal job research)"}
+UA = {"User-Agent": "Mozilla/5.0 JobRadarEverywhere/1.2 (+personal job research)"}
 
-APPLY_TEXT = re.compile(r"\b(apply(?:\s+now|\s+online)?|online\s+application|register(?:\s+now)?|application\s+portal|candidate\s+login|click\s+here\s+to\s+apply)\b", re.I)
+APPLY_TEXT = re.compile(r"\b(apply(?:\s+now|\s+online)?|online\s+application|register(?:\s+now)?|application\s+portal|candidate\s+login|click\s+here\s+to\s+apply|submit\s+application)\b", re.I)
 NOTICE_TEXT = re.compile(r"\b(notification|advertisement|detailed\s+advertisement|official\s+notice|recruitment\s+notice)\b", re.I)
-APPLY_URL = re.compile(r"(apply|application|register|registration|recruit|career|job|candidate|login)", re.I)
+APPLY_URL = re.compile(r"(apply|application|register|registration|recruit|career|job|candidate|position|vacanc)", re.I)
 NOTICE_URL = re.compile(r"(notification|advert|notice|vacanc|recruit).*(\.pdf(?:$|\?))|\.pdf(?:$|\?)", re.I)
+
+# Direct employer/application systems. If a live URL is on one of these domains, JobRadar can
+# treat it as a verified application destination instead of only showing the discovery board.
 ATS_DOMAINS = (
     "greenhouse.io", "boards.greenhouse.io", "job-boards.greenhouse.io",
     "lever.co", "jobs.lever.co", "ashbyhq.com", "jobs.ashbyhq.com",
-    "workdayjobs.com", "myworkdayjobs.com", "smartrecruiters.com",
-    "icims.com", "oraclecloud.com", "successfactors.com",
+    "workdayjobs.com", "myworkdayjobs.com", "myworkdaysite.com",
+    "smartrecruiters.com", "jobs.smartrecruiters.com",
+    "workable.com", "apply.workable.com", "jobs.workable.com",
+    "recruitee.com", "personio.de", "jobs.personio.de", "personio.com",
+    "teamtailor.com", "bamboohr.com", "jobvite.com", "jobs.jobvite.com",
+    "breezy.hr", "icims.com", "taleo.net", "oraclecloud.com", "successfactors.com",
+    "rippling.com", "ats.rippling.com", "comeet.com", "applytojob.com",
+    "pinpointhq.com", "careers-page.com", "jobscore.com", "jobs.jobscore.com",
+    "dayforcehcm.com", "jobs.dayforcehcm.com", "eightfold.ai", "phenompeople.com",
+    "adp.com", "recruiting.adp.com", "workforcenow.adp.com", "hireology.com",
 )
 SOCIAL_DOMAINS = ("linkedin.com", "reddit.com", "x.com", "twitter.com", "instagram.com", "facebook.com")
 JOB_BOARD_DOMAINS = (
     "linkedin.com", "naukri.com", "indeed.com", "internshala.com", "shine.com",
     "foundit.in", "timesjobs.com", "freshersworld.com", "cutshort.io", "instahyre.com",
-    "hirist.tech", "apna.co", "workindia.in", "jobhai.com", "unstop.com", "wellfound.com",
-    "glassdoor.co.in", "jooble.org", "adzuna.in", "careerjet.co.in", "jora.com", "talent.com",
+    "hirist.tech", "iimjobs.com", "apna.co", "workindia.in", "jobhai.com", "unstop.com",
+    "wellfound.com", "hirect.in", "herkey.com", "quikr.com", "glassdoor.co.in",
+    "jooble.org", "adzuna.in", "careerjet.co.in", "jora.com", "talent.com", "grabjobs.co",
+    "jobs.weekday.works", "cuvette.tech", "joinsuperset.com", "geektrust.com", "talent500.co",
+    "placementindia.com", "freshersnow.com", "timesascent.com",
 )
 
 # Search engines regularly return footer/legal/auth/account pages from job boards. Those are
@@ -35,7 +49,7 @@ NON_JOB_PATH = re.compile(
     r"feed(?:/|$)|about(?:/|$)|contact(?:/|$)|support(?:/|$))",
     re.I,
 )
-JOBISH_PATH = re.compile(r"(?:job|jobs|job-listing|job-listings|viewjob|position|opening|vacanc|career|internship|intern|apply)", re.I)
+JOBISH_PATH = re.compile(r"(?:job|jobs|job-listing|job-listings|viewjob|position|opening|vacanc|career|internship|intern|apply|opportunit)", re.I)
 
 
 def _host(url: str) -> str:
@@ -48,12 +62,7 @@ def _matches_domain(url: str, domains: list[str] | tuple[str, ...]) -> bool:
 
 
 def is_non_job_url(url: str) -> bool:
-    """Return True for navigation/auth/legal/search pages that are not concrete job listings.
-
-    This is intentionally stricter for public job boards because search engines often return
-    login, registration, legal, company, search-result and social-post URLs that look alive but
-    are unusable as an individual job destination.
-    """
+    """Return True for navigation/auth/legal/search pages that are not concrete job listings."""
     try:
         p = urlparse(url or "")
     except Exception:
@@ -76,13 +85,15 @@ def is_non_job_url(url: str) -> bool:
     if host == "linkedin.com" or host.endswith(".linkedin.com"):
         return not bool(re.match(r"^/jobs/view/[^/?#]+/?$", path, re.I))
 
-    # Known public boards must point to a job-ish detail URL. This rejects Internshala student
-    # registration, Shine login pages, generic home/search pages and similar navigation noise.
+    # ATS hosts are application systems; their paths vary widely by vendor and tenant. Generic
+    # account/legal paths above are still rejected, but we do not force a single URL pattern.
+    if _matches_domain(url, ATS_DOMAINS):
+        return False
+
     if any(host == d or host.endswith("." + d) for d in JOB_BOARD_DOMAINS):
         combined = f"{path}?{query}"
         if not JOBISH_PATH.search(combined):
             return True
-        # Explicitly reject common search/result collection pages even when they contain 'jobs'.
         if re.search(r"/(?:jobs?|internships?)/(?:search|browse)(?:/|$)", path, re.I):
             return True
 
@@ -112,7 +123,7 @@ def _candidate_score(text: str, href: str, official_domains: list[str], source_u
     score = 0
     if APPLY_TEXT.search(text): score += 70
     if APPLY_URL.search(href): score += 20
-    if _matches_domain(href, ATS_DOMAINS): score += 35
+    if _matches_domain(href, ATS_DOMAINS): score += 40
     if official_domains and _matches_domain(href, official_domains): score += 25
     if _same_or_trusted(href, official_domains, source_url): score += 10
     if _is_pdf(href): score -= 90
@@ -184,7 +195,6 @@ def resolve_job_links(canonical_url: str, source_url: str, official_domains: lis
         r = _fetch(page)
         if not r or r.status_code >= 400 or "html" not in r.headers.get("content-type", "").lower():
             continue
-        # Redirecting a job listing into auth/legal/search means the listing is no longer usable.
         if is_non_job_url(str(r.url)):
             continue
         soup = BeautifulSoup(r.text, "html.parser")
