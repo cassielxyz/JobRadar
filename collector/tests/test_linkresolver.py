@@ -45,3 +45,15 @@ def test_internshala_job_detail_is_allowed():
 
 def test_shine_login_is_rejected():
     assert is_non_job_url('https://www.shine.com/pages/myshine/login')
+
+
+def test_dayforce_job_url_is_allowed_as_direct_ats_destination():
+    assert not is_non_job_url('https://jobs.dayforcehcm.com/en-US/acme/CANDIDATEPORTAL/jobs/12345')
+
+
+def test_workday_site_job_url_is_allowed_as_direct_ats_destination():
+    assert not is_non_job_url('https://acme.wd5.myworkdaysite.com/recruiting/acme/jobs/job/Network-Engineer_R123')
+
+
+def test_adp_job_url_is_allowed_as_direct_ats_destination():
+    assert not is_non_job_url('https://recruiting.adp.com/srccar/public/RTI.home?c=123&d=ExternalCareerSite')
