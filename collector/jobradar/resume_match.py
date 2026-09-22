@@ -1,9 +1,9 @@
 from __future__ import annotations
 import re
-from datetime import date
 from .extract import has_explicit_fresher_evidence
 from .scoring import location_matches
 from .eligibility import qualification_gate
+from .application_window import application_is_expired
 
 NORMALIZE = {
     'tcp/ip':'tcp/ip','tcpip':'tcp/ip','active directory':'active directory','ad':'active directory',
@@ -27,12 +27,8 @@ def _contains(text, term):
     return t in s
 
 def _deadline_expired(job):
-    deadline=getattr(job,'deadline',None)
-    if not deadline:return False
-    try:
-        return date.fromisoformat(str(deadline)[:10]) < date.today()
-    except Exception:
-        return False
+    text=f"{getattr(job,'title','')} {getattr(job,'description','')}"
+    return application_is_expired(getattr(job,'deadline',None),text)
 
 def load_candidate(db):
     prefs_rows=db.select('candidate_preferences', {'select':'*','order':'updated_at.desc','limit':'1'})
