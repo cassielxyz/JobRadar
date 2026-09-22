@@ -29,6 +29,14 @@ platforms:
   - {name: Hirect, domain: hirect.in, tags: [india, startup, fresher]}
   - {name: HerKey, domain: herkey.com, tags: [india, general]}
   - {name: Quikr Jobs, domain: quikr.com, tags: [india, general, fresher]}
+  - {name: Weekday Jobs, domain: jobs.weekday.works, tags: [india, startup, tech, fresher]}
+  - {name: Cuvette, domain: cuvette.tech, tags: [india, startup, tech, fresher, internship]}
+  - {name: Superset, domain: joinsuperset.com, tags: [india, fresher, internship, campus]}
+  - {name: Geektrust, domain: geektrust.com, tags: [india, tech, fresher]}
+  - {name: Talent500, domain: talent500.co, tags: [india, tech, enterprise]}
+  - {name: PlacementIndia, domain: placementindia.com, tags: [india, general, fresher]}
+  - {name: FreshersNow, domain: freshersnow.com, tags: [india, fresher, government]}
+  - {name: Times Ascent, domain: timesascent.com, tags: [india, general]}
   - {name: Jooble, domain: jooble.org, tags: [india, general, aggregator]}
   - {name: Adzuna India, domain: adzuna.in, tags: [india, general, aggregator]}
   - {name: Careerjet India, domain: careerjet.co.in, tags: [india, general, aggregator]}
@@ -70,7 +78,9 @@ platforms:
   - {name: Ashby, domain: jobs.ashbyhq.com, tags: [ats, startup, tech]}
   - {name: SmartRecruiters, domain: jobs.smartrecruiters.com, tags: [ats, general, tech]}
   - {name: Workday, domain: myworkdayjobs.com, tags: [ats, enterprise, tech]}
+  - {name: Workday Sites, domain: myworkdaysite.com, tags: [ats, enterprise, tech]}
   - {name: Workable, domain: apply.workable.com, tags: [ats, startup, tech]}
+  - {name: Workable Jobs, domain: jobs.workable.com, tags: [ats, startup, tech]}
   - {name: Recruitee, domain: recruitee.com, tags: [ats, startup, tech]}
   - {name: Personio, domain: jobs.personio.de, tags: [ats, startup, tech]}
   - {name: Teamtailor, domain: teamtailor.com, tags: [ats, startup, tech]}
@@ -87,3 +97,9 @@ platforms:
   - {name: Pinpoint, domain: pinpointhq.com, tags: [ats, startup, tech]}
   - {name: Zoho Recruit Career Sites, domain: careers-page.com, tags: [ats, india, startup]}
   - {name: JobScore, domain: jobs.jobscore.com, tags: [ats, startup, tech]}
+  - {name: Dayforce, domain: jobs.dayforcehcm.com, tags: [ats, enterprise, tech]}
+  - {name: Eightfold, domain: eightfold.ai, tags: [ats, enterprise, tech]}
+  - {name: Phenom, domain: phenompeople.com, tags: [ats, enterprise, tech]}
+  - {name: ADP Recruiting, domain: recruiting.adp.com, tags: [ats, enterprise]}
+  - {name: ADP Workforce Now, domain: workforcenow.adp.com, tags: [ats, enterprise]}
+  - {name: Hireology, domain: hireology.com, tags: [ats, general]}
