@@ -2,14 +2,15 @@ from jobradar.collectors.agent_reach import AgentReachCollector, PLATFORMS, _pla
 from jobradar.models import Category
 
 
-def test_platform_catalog_has_at_least_fifty_sources():
-    assert len(PLATFORMS) >= 50
+def test_platform_catalog_has_broad_india_and_ats_coverage():
+    assert len(PLATFORMS) >= 65
     domains = {str(x.get('domain')) for x in PLATFORMS}
     for required in {
         'linkedin.com', 'naukri.com', 'indeed.com', 'internshala.com',
-        'cutshort.io', 'instahyre.com', 'wellfound.com',
+        'cutshort.io', 'instahyre.com', 'wellfound.com', 'jobs.weekday.works',
+        'cuvette.tech', 'joinsuperset.com', 'geektrust.com', 'talent500.co',
         'boards.greenhouse.io', 'jobs.lever.co', 'jobs.ashbyhq.com',
-        'myworkdayjobs.com',
+        'myworkdayjobs.com', 'jobs.dayforcehcm.com', 'recruiting.adp.com',
     }:
         assert required in domains
 
@@ -19,19 +20,24 @@ def test_platform_detection_prefers_specific_domain():
     assert _platform_for('https://boards.greenhouse.io/example/jobs/1')['name'] == 'Greenhouse'
 
 
-def test_fresher_queries_include_major_india_boards_and_ats():
+def test_fresher_queries_include_dedicated_major_india_boards_and_ats():
     cat = Category(
         id='x', name='Fresher Cyber', slug='fresher-cyber', type='startup',
         role_keywords=['SOC Analyst', 'Network Engineer'], hidden_keywords=['Security Analyst'],
         exclude_keywords=[], locations=['Chennai', 'Bengaluru'], fresher_only=True,
         source_kinds=['community','job_board','ats'],
     )
-    queries = ' '.join(AgentReachCollector()._queries(cat)).lower()
+    query_list = AgentReachCollector()._queries(cat)
+    queries = ' '.join(query_list).lower()
     assert 'site:naukri.com' in queries
     assert 'site:indeed.com' in queries
     assert 'site:linkedin.com' in queries
+    assert 'site:internshala.com' in queries
     assert 'site:jobs.lever.co' in queries
+    assert 'site:jobs.dayforcehcm.com' in queries
     assert 'fresher' in queries
+    # We deliberately use many independent searches instead of one giant job-board query.
+    assert len(query_list) >= 20
 
 
 def test_search_result_title_is_cleaned():
