@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 from ..models import Job, Category
 from ..scoring import semantic_gate, location_plausible
 from ..category_research import category_search_terms
+from ..dedupe import normalized_url_key
 
 API = 'https://freehire.me/api/v1/agent/jobs/search'
 
@@ -54,6 +55,9 @@ def _platform_name(x: dict, url: str):
         'foundit.in':'Foundit','shine.com':'Shine','timesjobs.com':'TimesJobs',
         'freshersworld.com':'Freshersworld','internshala.com':'Internshala',
         'cutshort.io':'Cutshort','instahyre.com':'Instahyre','wellfound.com':'Wellfound',
+        'hirist.tech':'Hirist','apna.co':'Apna','unstop.com':'Unstop',
+        'jobs.weekday.works':'Weekday','cuvette.tech':'Cuvette','joinsuperset.com':'Superset',
+        'geektrust.com':'Geektrust','talent500.co':'Talent500',
         'boards.greenhouse.io':'Greenhouse','job-boards.greenhouse.io':'Greenhouse',
         'jobs.lever.co':'Lever','jobs.ashbyhq.com':'Ashby','jobs.smartrecruiters.com':'SmartRecruiters',
     }
@@ -74,16 +78,17 @@ def _rotate(values, slot):
 class FreeHireCollector:
     """Keyless dynamic discovery for every enabled category.
 
-    Each run starts with recent vacancies and samples all major category query variants before
-    widening the date range. This avoids repeatedly filling the candidate quota from the same
-    first role query while keeping GitHub Actions runtime bounded.
+    The collector samples a wider role family but caps each query's contribution. That produces
+    more unique vacancies without letting a broad term such as "network engineer" crowd out NOC,
+    support, infrastructure, SOC, cloud-support and adjacent fresher titles.
     """
     def __init__(self):
-        self.client = httpx.Client(timeout=30, follow_redirects=True, headers={"User-Agent":"JobRadarEverywhere/1.3"})
+        self.client = httpx.Client(timeout=30, follow_redirects=True, headers={"User-Agent":"JobRadarEverywhere/1.4"})
 
     def _queries(self, category: Category):
-        queries = category_search_terms(category, limit=10)
-        # Rotate every six hours so scheduled runs do not always privilege the same synonym.
+        queries = category_search_terms(category, limit=14)
+        # Rotate every six hours so the newest result window is not always biased toward the same
+        # first role synonym when an upstream API truncates results.
         slot = int(datetime.now(timezone.utc).timestamp() // (6 * 3600))
         return _rotate(queries, slot)
 
@@ -106,21 +111,19 @@ class FreeHireCollector:
             params['seniority'] = 'junior,intern'
         return params
 
-    def collect(self, category: Category, source_id='freehire', target_candidates=70):
+    def collect(self, category: Category, source_id='freehire', target_candidates=100):
         out = []
         seen = set()
         queries = self._queries(category)
         if not queries:
             return out
 
-        # Limit each query's contribution per freshness pass. Without this, broad terms such as
-        # "network engineer" can consume the whole quota and every later run returns the exact
-        # same top results while adjacent titles are never researched.
-        per_query_cap = max(4, min(10, max(1, target_candidates // len(queries))))
+        per_query_cap = max(4, min(8, max(1, target_candidates // max(1, len(queries)))))
 
-        # 7 days gives genuinely current vacancies, then 30/90 days provide resilience for niche
-        # categories without the very broad 180-day repetition that caused stale recurring lists.
-        for days in (7, 30, 90):
+        # Three freshness passes keep the daily pool current while still giving niche networking
+        # and security titles enough depth. The 60-day pass is only reached when the fresher pool
+        # remains thin after 3 and 14 days.
+        for days in (3, 14, 60):
             for query in queries:
                 try:
                     r = self.client.get(API, params=self._params(category, query, days=days))
@@ -135,9 +138,10 @@ class FreeHireCollector:
                     if accepted_for_query >= per_query_cap:
                         break
                     url = str(x.get('url') or x.get('apply_url') or '').strip()
-                    if not url or url in seen:
+                    url_key = normalized_url_key(url)
+                    if not url or not url_key or url_key in seen:
                         continue
-                    seen.add(url)
+                    seen.add(url_key)
                     title = _plain(x.get('title'))[:240]
                     description = _plain(x.get('description') or x.get('summary') or x.get('description_preview'))[:20000]
                     company = _plain(x.get('company') or x.get('company_name') or 'Unknown company')[:240]
@@ -176,9 +180,8 @@ class FreeHireCollector:
                     out.append(job)
                     accepted_for_query += 1
 
-            # Complete the full query family before deciding that the candidate pool is full.
             if len(out) >= target_candidates:
                 return out[:target_candidates]
-            if days >= 30 and len(out) >= max(25, target_candidates // 2):
+            if days >= 14 and len(out) >= max(45, target_candidates * 2 // 3):
                 break
         return out[:target_candidates]
