@@ -10,6 +10,7 @@ GENERIC_ROLE_WORDS = {
     'engineer', 'engineering', 'analyst', 'specialist', 'administrator', 'admin',
     'developer', 'consultant', 'associate', 'executive', 'technician', 'support',
     'architect', 'manager', 'intern', 'internship', 'trainee', 'officer', 'lead',
+    'operations', 'operation', 'monitoring', 'helpdesk', 'desk',
 }
 STOPWORDS = {
     'job', 'jobs', 'role', 'roles', 'opening', 'openings', 'career', 'careers',
@@ -18,22 +19,37 @@ STOPWORDS = {
 }
 
 ROLE_FAMILIES: tuple[tuple[re.Pattern[str], tuple[str, ...]], ...] = (
-    (re.compile(r'\b(network|networking|ccna|noc|routing|switching|cisco)\b', re.I), (
-        'network engineer', 'network administrator', 'network admin', 'network support engineer',
-        'network operations engineer', 'noc engineer', 'noc analyst', 'infrastructure engineer',
-        'it infrastructure engineer', 'technical support engineer',
+    (re.compile(r'\b(network|networking|ccna|noc|routing|switching|cisco|infrastructure)\b', re.I), (
+        'network engineer', 'junior network engineer', 'network support engineer',
+        'network support associate', 'network administrator', 'network admin',
+        'network operations engineer', 'network operations center engineer', 'noc engineer',
+        'noc analyst', 'noc support engineer', 'noc monitoring engineer', 'network analyst',
+        'network technician', 'network operations associate', 'infrastructure engineer',
+        'infrastructure support engineer', 'it infrastructure engineer', 'it operations engineer',
+        'it operations associate', 'technical support engineer', 'technical support associate',
+        'system engineer', 'systems engineer', 'system administrator', 'systems administrator',
+        'desktop support engineer', 'service desk analyst', 'it support engineer',
+        'graduate engineer trainee network', 'network trainee', 'network intern',
     )),
-    (re.compile(r'\b(cybersecurity|cyber security|infosec|information security|soc analyst|siem|vapt|penetration test)\b', re.I), (
-        'cybersecurity analyst', 'cyber security analyst', 'security analyst', 'soc analyst',
-        'soc engineer', 'information security analyst', 'security engineer', 'vulnerability analyst',
-        'incident response analyst', 'security operations analyst',
+    (re.compile(r'\b(cybersecurity|cyber security|infosec|information security|soc analyst|siem|vapt|penetration test|security operations)\b', re.I), (
+        'cybersecurity analyst', 'cyber security analyst', 'junior cybersecurity analyst',
+        'security analyst', 'junior security analyst', 'soc analyst', 'soc analyst l1',
+        'soc engineer', 'security operations analyst', 'security operations center analyst',
+        'information security analyst', 'information security associate', 'security engineer',
+        'network security analyst', 'network security engineer', 'vulnerability analyst',
+        'vulnerability management analyst', 'incident response analyst', 'siem analyst',
+        'security monitoring analyst', 'cybersecurity associate', 'cybersecurity trainee',
+        'cybersecurity intern', 'information security intern', 'vapt analyst',
     )),
     (re.compile(r'\b(cloud|aws|azure|gcp)\b', re.I), (
-        'cloud engineer', 'cloud support engineer', 'cloud operations engineer',
-        'cloud infrastructure engineer', 'cloud administrator', 'platform engineer',
+        'cloud engineer', 'junior cloud engineer', 'cloud support engineer', 'cloud support associate',
+        'cloud operations engineer', 'cloud operations associate', 'cloud infrastructure engineer',
+        'cloud administrator', 'cloud support analyst', 'platform engineer', 'cloud trainee',
+        'cloud intern',
     )),
     (re.compile(r'\b(devops|site reliability|sre|platform engineer)\b', re.I), (
-        'devops engineer', 'site reliability engineer', 'sre engineer', 'platform engineer',
+        'devops engineer', 'junior devops engineer', 'devops associate', 'devops trainee',
+        'site reliability engineer', 'sre engineer', 'platform engineer',
         'cloud devops engineer', 'build and release engineer',
     )),
     (re.compile(r'\b(data analyst|data analytics|business intelligence|\bbi analyst\b)\b', re.I), (
@@ -52,9 +68,12 @@ ROLE_FAMILIES: tuple[tuple[re.Pattern[str], tuple[str, ...]], ...] = (
         'qa engineer', 'quality assurance engineer', 'software tester', 'test engineer',
         'automation test engineer', 'qa analyst',
     )),
-    (re.compile(r'\b(help ?desk|service desk|desktop support|it support|technical support|system admin)\b', re.I), (
-        'it support engineer', 'technical support engineer', 'desktop support engineer',
-        'service desk analyst', 'help desk analyst', 'system administrator', 'systems administrator',
+    (re.compile(r'\b(help ?desk|service desk|desktop support|it support|technical support|system admin|it operations)\b', re.I), (
+        'it support engineer', 'it support associate', 'technical support engineer',
+        'technical support associate', 'desktop support engineer', 'desktop support technician',
+        'service desk analyst', 'service desk associate', 'help desk analyst', 'helpdesk engineer',
+        'system administrator', 'systems administrator', 'system engineer', 'it operations engineer',
+        'it operations analyst', 'infrastructure support engineer',
     )),
     (re.compile(r'\b(ui|ux|user experience|product design|web design)\b', re.I), (
         'ui designer', 'ux designer', 'ui ux designer', 'product designer', 'web designer',
@@ -78,6 +97,8 @@ ALIASES = {
     'frontend': {'frontend', 'front-end', 'front end'},
     'backend': {'backend', 'back-end', 'back end'},
     'fullstack': {'fullstack', 'full-stack', 'full stack'},
+    'operations': {'operations', 'operation', 'ops'},
+    'support': {'support', 'helpdesk', 'help desk', 'service desk'},
 }
 
 
@@ -141,7 +162,7 @@ def related_title_match(title: str, category: Category) -> list[str]:
     if not title_norm:
         return []
     hits = []
-    for term in category_search_terms(category, limit=40):
+    for term in category_search_terms(category, limit=60):
         term_norm = _norm(term)
         if term_norm in title_norm:
             hits.append(term)
@@ -156,9 +177,6 @@ def related_title_match(title: str, category: Category) -> list[str]:
             continue
         domain_hits = sum(1 for t in domain if _token_present(title_norm, t))
         generic_hits = sum(1 for t in generic if _token_present(title_norm, t))
-        # For one-domain-word roles such as "data analyst" or "network engineer",
-        # require both the domain and role word. Multi-domain phrases may match on 2/3+
-        # domain words even if the exact suffix differs.
         if len(domain) == 1:
             ok = domain_hits == 1 and (not generic or generic_hits >= 1)
         else:
