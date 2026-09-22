@@ -1,7 +1,9 @@
 from __future__ import annotations
 import re
+from datetime import date
 from .extract import has_explicit_fresher_evidence
 from .scoring import location_matches
+from .eligibility import qualification_gate
 
 NORMALIZE = {
     'tcp/ip':'tcp/ip','tcpip':'tcp/ip','active directory':'active directory','ad':'active directory',
@@ -23,6 +25,14 @@ def _contains(text, term):
     if not t:return False
     if len(t)<=3:return bool(re.search(rf'\b{re.escape(t)}\b',s))
     return t in s
+
+def _deadline_expired(job):
+    deadline=getattr(job,'deadline',None)
+    if not deadline:return False
+    try:
+        return date.fromisoformat(str(deadline)[:10]) < date.today()
+    except Exception:
+        return False
 
 def load_candidate(db):
     prefs_rows=db.select('candidate_preferences', {'select':'*','order':'updated_at.desc','limit':'1'})
@@ -66,8 +76,18 @@ def apply_candidate_to_categories(categories, candidate):
     return categories
 
 def personalized_score(job, category, base_score, candidate):
+    # Deadlines are a hard constraint, independent of resume/profile availability.
+    if _deadline_expired(job):
+        return 0,0,['application deadline has passed'],[]
     if not candidate or not candidate.get('resume'):
         return base_score, None, [], []
+
+    qualification=qualification_gate(job,candidate,strict=(getattr(category,'type',None)=='government'))
+    if getattr(category,'type',None)=='government' and qualification.get('status')!='eligible':
+        reason=(qualification.get('reasons') or ['formal eligibility could not be verified'])[0]
+        prefix='government eligibility failed' if qualification.get('status')=='ineligible' else 'government eligibility not confirmed'
+        return 0,0,[f'{prefix}: {reason}'],[]
+
     p=candidate.get('preferences') or {}; r=candidate.get('resume') or {}; parsed=r.get('parsed_json') or {}; text=f"{job.title} {job.description}".lower()
     reasons=[]; fit=0
     roles=list(dict.fromkeys([*(p.get('target_roles') or []),*(r.get('target_roles') or []),*(parsed.get('target_roles') or []),*category.role_keywords]))
@@ -91,10 +111,9 @@ def personalized_score(job, category, base_score, candidate):
     if cert_hits:
         fit+=10; reasons.append('relevant certification: '+', '.join(cert_hits[:2]))
 
-    educ=' '.join([*(r.get('education') or []),*(parsed.get('education') or [])]).lower()
-    if re.search(r'computer science|\bcse\b|information technology|\bit\b',educ+' '+str(r.get('raw_text') or '')[:6000].lower()):
-        if re.search(r'computer science|\bcse\b|information technology|\bit\b|b\.?e|b\.?tech',text):
-            fit+=8; reasons.append('education aligns with eligibility')
+    # Formal education earns points only after the exact qualification parser approves it.
+    if qualification.get('status')=='eligible':
+        fit+=8; reasons.append('formal education requirement matched')
 
     locs=p.get('locations') or category.locations
     if location_matches(job.location or '',locs):
@@ -127,6 +146,7 @@ def should_queue_auto_apply(job, category, final_score, candidate):
     if not p.get('auto_apply_enabled'):return False,'auto apply disabled'
     threshold=int(p.get('auto_apply_threshold') or 95)
     if final_score<threshold:return False,'below auto-apply threshold'
-    if job.event_type!='vacancy' or job.application_status=='closed':return False,'not an open vacancy'
+    if _deadline_expired(job):return False,'application deadline has passed'
+    if job.event_type!='vacancy' or job.application_status in {'closed','expired'}:return False,'not an open vacancy'
     if not job.apply_verified or not job.apply_url:return False,'apply link is not verified'
     return True,'high-confidence verified match'
