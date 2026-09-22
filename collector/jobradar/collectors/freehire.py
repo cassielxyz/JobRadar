@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import html
-import re
-import httpx
+from datetime import datetime, timezone
 from urllib.parse import urlparse
+
+import httpx
 from bs4 import BeautifulSoup
+
 from ..models import Job, Category
 from ..scoring import semantic_gate, location_plausible
 from ..category_research import category_search_terms
@@ -61,20 +63,31 @@ def _platform_name(x: dict, url: str):
     return host or 'FreeHire discovery'
 
 
+def _rotate(values, slot):
+    values = list(values or [])
+    if len(values) < 2:
+        return values
+    offset = int(slot or 0) % len(values)
+    return values[offset:] + values[:offset]
+
+
 class FreeHireCollector:
     """Keyless dynamic discovery for every enabled category.
 
-    Search terms are generated from the category itself, so newly-created/custom categories
-    do not depend on a static list of hard-coded roles. A wider date window is used only when
-    the recent passes cannot fill a useful candidate pool.
+    Each run starts with very recent vacancies and samples *all* category query variants before
+    widening the date range. This avoids repeatedly filling the candidate quota from the same
+    first one or two role queries and therefore improves discovery of genuinely new jobs.
     """
     def __init__(self):
-        self.client = httpx.Client(timeout=30, follow_redirects=True, headers={"User-Agent":"JobRadarEverywhere/1.2"})
+        self.client = httpx.Client(timeout=30, follow_redirects=True, headers={"User-Agent":"JobRadarEverywhere/1.3"})
 
     def _queries(self, category: Category):
-        return category_search_terms(category, limit=14)
+        queries = category_search_terms(category, limit=14)
+        # Rotate every six hours so scheduled runs do not always privilege the same synonym.
+        slot = int(datetime.now(timezone.utc).timestamp() // (6 * 3600))
+        return _rotate(queries, slot)
 
-    def _params(self, category: Category, query: str, days=60):
+    def _params(self, category: Category, query: str, days=30):
         params = {
             'q': query,
             'countries': 'IN',
@@ -100,9 +113,13 @@ class FreeHireCollector:
         if not queries:
             return out
 
-        # 30/90 days prioritizes freshness; 180 days is a resilience pass for niche/new
-        # categories. Old entries are still rejected later if the listing is closed/stale.
-        for days in (30, 90, 180):
+        # Limit each query's contribution per freshness pass. Without this, broad terms such as
+        # "network engineer" can consume the whole quota and every later run returns the exact
+        # same top results while adjacent titles are never researched.
+        per_query_cap = max(4, min(10, max(1, target_candidates // len(queries))))
+
+        # Search new postings first, then widen only when a category is genuinely sparse.
+        for days in (3, 14, 45, 120):
             for query in queries:
                 try:
                     r = self.client.get(API, params=self._params(category, query, days=days))
@@ -111,7 +128,11 @@ class FreeHireCollector:
                     data = payload.get('data') or payload.get('jobs') or []
                 except Exception:
                     continue
+
+                accepted_for_query = 0
                 for x in data:
+                    if accepted_for_query >= per_query_cap:
+                        break
                     url = str(x.get('url') or x.get('apply_url') or '').strip()
                     if not url or url in seen:
                         continue
@@ -152,8 +173,12 @@ class FreeHireCollector:
                     if not location_plausible(job.location, category.locations):
                         continue
                     out.append(job)
-                    if len(out) >= target_candidates:
-                        return out
-            if len(out) >= max(25, target_candidates // 2):
+                    accepted_for_query += 1
+
+            # Complete the full query family before deciding that the candidate pool is full.
+            # This is the key novelty fix: adjacent titles get searched on every run.
+            if len(out) >= target_candidates:
+                return out[:target_candidates]
+            if days >= 45 and len(out) >= max(25, target_candidates // 2):
                 break
-        return out
+        return out[:target_candidates]
