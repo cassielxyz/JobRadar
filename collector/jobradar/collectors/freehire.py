@@ -74,15 +74,15 @@ def _rotate(values, slot):
 class FreeHireCollector:
     """Keyless dynamic discovery for every enabled category.
 
-    Each run starts with very recent vacancies and samples *all* category query variants before
+    Each run starts with recent vacancies and samples all major category query variants before
     widening the date range. This avoids repeatedly filling the candidate quota from the same
-    first one or two role queries and therefore improves discovery of genuinely new jobs.
+    first role query while keeping GitHub Actions runtime bounded.
     """
     def __init__(self):
         self.client = httpx.Client(timeout=30, follow_redirects=True, headers={"User-Agent":"JobRadarEverywhere/1.3"})
 
     def _queries(self, category: Category):
-        queries = category_search_terms(category, limit=14)
+        queries = category_search_terms(category, limit=10)
         # Rotate every six hours so scheduled runs do not always privilege the same synonym.
         slot = int(datetime.now(timezone.utc).timestamp() // (6 * 3600))
         return _rotate(queries, slot)
@@ -118,8 +118,9 @@ class FreeHireCollector:
         # same top results while adjacent titles are never researched.
         per_query_cap = max(4, min(10, max(1, target_candidates // len(queries))))
 
-        # Search new postings first, then widen only when a category is genuinely sparse.
-        for days in (3, 14, 45, 120):
+        # 7 days gives genuinely current vacancies, then 30/90 days provide resilience for niche
+        # categories without the very broad 180-day repetition that caused stale recurring lists.
+        for days in (7, 30, 90):
             for query in queries:
                 try:
                     r = self.client.get(API, params=self._params(category, query, days=days))
@@ -176,9 +177,8 @@ class FreeHireCollector:
                     accepted_for_query += 1
 
             # Complete the full query family before deciding that the candidate pool is full.
-            # This is the key novelty fix: adjacent titles get searched on every run.
             if len(out) >= target_candidates:
                 return out[:target_candidates]
-            if days >= 45 and len(out) >= max(25, target_candidates // 2):
+            if days >= 30 and len(out) >= max(25, target_candidates // 2):
                 break
         return out[:target_candidates]
